@@ -1,0 +1,25 @@
+# Python Dependencies for DLT Pipelines
+# ========================================
+
+# Core dependencies
+pyspark==3.5.0
+
+# Testing
+pytest==7.4.0
+pytest-cov==4.1.0
+chispa==0.9.3  # PySpark testing utilities
+
+# Code quality
+black==23.7.0
+flake8==6.1.0
+pylint==2.17.5
+
+# Type checking
+mypy==1.5.0
+
+# Utilities
+python-dotenv==1.0.0
+pyyaml==6.0.1
+
+# Logging
+structlog==23.1.0

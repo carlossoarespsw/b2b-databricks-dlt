@@ -1,0 +1,69 @@
+
+
+# ========================================
+# Development Configuration
+# ========================================
+
+environment: dev
+
+# Databricks Configuration
+databricks:
+  host: https://dbc-44efcc80-4f37.cloud.databricks.com
+  workspace_id: "44efcc80-4f37"
+  token_env_var: DATABRICKS_SERVICE_PRINCIPAL_TOKEN
+
+# Catalog Configuration
+catalog:
+  name: b2b_federated
+  schemas:
+    - bronze
+    - silver
+    - gold
+
+# Storage Configuration
+storage:
+  path: s3://b2b-databricks-dev
+  checkpoint_path: s3://b2b-databricks-dev/dlt-checkpoints/dev/
+  aws_region: us-west-2
+
+# Pipeline Configuration
+pipeline:
+  name: ingestao_medalhao_dev
+  development_mode: true
+  photon_enabled: true
+  num_workers: 1
+
+# Data Configuration
+data:
+  filter_year: 2025
+  debug_mode: true
+  sample_data: true
+  sample_fraction: 0.1
+
+# Job Configuration
+job:
+  enabled: false  # Pausado em dev
+  schedule: null
+  timeout_seconds: 7200
+  max_retries: 2
+
+# Git Configuration
+git:
+  repo_url: https://github.com/seu-usuario/b2b-databricks-dlt.git
+  branch: develop
+  path: /Repos/sp_b2b_dev/b2b-databricks-dlt
+
+# Monitoring
+monitoring:
+  enable_metrics: true
+  enable_expectations: true
+  notification_emails: []
+
+# Tags
+tags:
+  environment: dev
+  cost_center: data_engineering
+  project: b2b
+  managed_by: terraform
+  aws_region: us-west-2
+  metastore: metastore_aws_us_west_2
