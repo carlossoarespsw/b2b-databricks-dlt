@@ -1,138 +1,89 @@
-# ========================================
-# Bronze Layer - Ingestion Pipeline (TEST VERSION)
-# ========================================
-# Pipeline de teste com dados mockados para validação
-
 import dlt
-from pyspark.sql.functions import col, current_timestamp, lit
-from datetime import datetime, date
+from pyspark.sql.functions import current_timestamp, lit
 
-# ========================================
-# Configurações
-# ========================================
 ENVIRONMENT = spark.conf.get("environment", "dev")
-CATALOG = spark.conf.get("catalog", "b2b_federated")
+CATALOG_DEST = spark.conf.get("catalog", "b2b-federated")
+SOURCE_CATALOG = "vcn-federated"
+SOURCE_SCHEMA = "public"
+RECORD_LIMIT = 1000000
+SOURCE_SYSTEM = "VCN"
 
-# ========================================
-# Bronze Table: Test Vendas
-# ========================================
+try:
+    tables_query = f"""
+    SELECT DISTINCT table_name 
+    FROM {SOURCE_CATALOG}.information_schema.tables 
+    WHERE table_schema = '{SOURCE_SCHEMA}'
+    AND table_type = 'BASE TABLE'
+    ORDER BY table_name
+    """
+    tables_result = spark.sql(tables_query).collect()
+    table_names = [row["table_name"] for row in tables_result]
+    print(f"[INFO] Ingestão VCN: {len(table_names)} tabelas descobertas de {SOURCE_CATALOG}")
+except Exception as e:
+    print(f"[AVISO] VCN indisponível: {e}")
+    table_names = []
 
-@dlt.table(
-    name="bronze_vendas",
-    comment="Dados de teste - Camada Bronze",
-    table_properties={
-        "quality": "bronze",
-        "pipelines.autoOptimize.managed": "true"
-    }
-)
-@dlt.expect_all_or_drop({
-    "valid_id": "id IS NOT NULL",
-    "valid_valor": "valor_venda > 0"
-})
-def bronze_vendas():
-    """
-    Teste: Cria dados mockados de vendas.
-    """
-    data = [
-        (1, 100, 200, date(2025, 1, 15), 150.50, 2, "CONFIRMADO"),
-        (2, 101, 201, date(2025, 1, 20), 200.00, 3, "CONFIRMADO"),
-        (3, 102, 202, date(2025, 2, 10), 175.25, 1, "PENDENTE"),
-        (4, 103, 203, date(2025, 2, 15), 300.00, 5, "CONFIRMADO"),
-        (5, 104, 204, date(2025, 3, 05), 125.75, 2, "CONFIRMADO"),
-    ]
-    
-    df = spark.createDataFrame(
-        data,
-        ["id", "cliente_id", "produto_id", "data_venda", "valor_venda", "quantidade", "status"]
+for table_name in table_names:
+    @dlt.table(
+        name=f"bronze_vcn_{table_name}",
+        comment=f"VCN: {SOURCE_CATALOG}.{SOURCE_SCHEMA}.{table_name}",
+        table_properties={
+            "quality": "bronze",
+            "source_system": SOURCE_SYSTEM,
+            "pipelines.autoOptimize.managed": "true",
+            "source_catalog": SOURCE_CATALOG,
+            "source_schema": SOURCE_SCHEMA,
+            "source_table": table_name
+        }
     )
-    
-    df = df.withColumn("_ingestion_timestamp", current_timestamp())
-    df = df.withColumn("_source_file", lit("test_data"))
-    
-    return df
+    def create_bronze_vcn_table(src_catalog=SOURCE_CATALOG, src_schema=SOURCE_SCHEMA, tbl_name=table_name, source_system=SOURCE_SYSTEM):
+        source_table = f"{src_catalog}.{src_schema}.{tbl_name}"
+        df = spark.read.table(source_table).limit(RECORD_LIMIT)
+        
+        df = df.withColumn("_ingestion_timestamp", current_timestamp())
+        df = df.withColumn("_source_system", lit(source_system))
+        df = df.withColumn("_source_catalog", lit(src_catalog))
+        df = df.withColumn("_source_schema", lit(src_schema))
+        df = df.withColumn("_source_table", lit(tbl_name))
+        df = df.withColumn("_environment", lit(ENVIRONMENT))
+        
+        return df
 
 
-@dlt.table(
-    name="bronze_clientes",
-    comment="Dados de teste de clientes - Camada Bronze",
-    table_properties={
-        "quality": "bronze",
-        "pipelines.autoOptimize.managed": "true"
-    }
-)
-@dlt.expect_all_or_drop({
-    "valid_cliente_id": "cliente_id IS NOT NULL",
-    "valid_email": "email IS NOT NULL"
-})
-def bronze_clientes():
-    """
-    Teste: Cria dados mockados de clientes.
-    """
-    data = [
-        (100, "Cliente A", "clientea@email.com", "12345678901", "11987654321", "São Paulo", "SP"),
-        (101, "Cliente B", "clienteb@email.com", "98765432100", "11987654322", "Rio de Janeiro", "RJ"),
-        (102, "Cliente C", "clientec@email.com", "11144455566", "11987654323", "Belo Horizonte", "MG"),
-        (103, "Cliente D", "cliented@email.com", "22233344455", "11987654324", "São Paulo", "SP"),
-        (104, "Cliente E", "cliente.e@email.com", "33344455566", "11987654325", "Brasília", "DF"),
-    ]
+if not table_names:
+    print("[AVISO] Nenhuma tabela descoberta - usando dados de teste")
     
-    df = spark.createDataFrame(
-        data,
-        ["cliente_id", "nome", "email", "cpf_cnpj", "telefone", "cidade", "estado"]
-    )
+    @dlt.table(name="bronze_vendas", comment="Dados de teste")
+    def bronze_test_vendas():
+        from datetime import date
+        data = [
+            (1, 100, 200, date(2025, 1, 15), 150.50, 2, "CONFIRMADO"),
+            (2, 101, 201, date(2025, 1, 20), 200.00, 3, "CONFIRMADO"),
+            (3, 102, 202, date(2025, 2, 10), 175.25, 1, "PENDENTE"),
+        ]
+        df = spark.createDataFrame(
+            data,
+            ["id", "cliente_id", "produto_id", "data_venda", "valor_venda", "quantidade", "status"]
+        )
+        return df.withColumn("_ingestion_timestamp", current_timestamp()).withColumn("_environment", lit(ENVIRONMENT))
     
-    df = df.withColumn("_ingestion_timestamp", current_timestamp())
-    df = df.withColumn("_source_file", lit("test_data"))
+    @dlt.table(name="bronze_clientes", comment="Dados de teste")
+    def bronze_test_clientes():
+        from datetime import date
+        data = [
+            (100, "Cliente A", "cliente.a@email.com", date(2024, 1, 1)),
+            (101, "Cliente B", "cliente.b@email.com", date(2024, 2, 15)),
+            (102, "Cliente C", "cliente.c@email.com", date(2024, 3, 20)),
+        ]
+        df = spark.createDataFrame(data, ["id", "nome", "email", "data_cadastro"])
+        return df.withColumn("_ingestion_timestamp", current_timestamp()).withColumn("_environment", lit(ENVIRONMENT))
     
-    return df
-de teste de produtos - Camada Bronze"
-)
-def bronze_produtos():
-    """
-    Teste: Cria dados mockados de produtos.
-    """
-    data = [
-        (200, "Notebook Dell", "Eletrônicos", 3500.00, "Notebook Dell Inspiron 15"),
-        (201, "Mouse Logitech", "Periféricos", 150.00, "Mouse sem fio Logitech M705"),
-        (202, "Teclado Mecânico", "Periféricos", 450.00, "Teclado mecânico RGB"),
-        (203, "Monitor LG 24\"", "Eletrônicos", 1200.00, "Monitor LG 24 polegadas Full HD"),
-        (204, "Webcam HD", "Periféricos", 300.00, "Webcam Full HD com microfone"),
-    ]
-    
-    df = spark.createDataFrame(
-        data,
-        ["produto_id", "nome_produto", "categoria", "preco_unitario", "descricao"]
-    )
-    
-    df = df.withColumn("_ingestion_timestamp", current_timestamp())
-    
-    return df
-
-
-# ========================================
-# Métricas de Teste
-# ========================================
-
-@dlt.table(
-    name="bronze_metrics",
-    comment="Métricas de ingestão - TESTE"
-)
-def bronze_metrics():
-    """
-    Tabela de métricas para validação.
-    """
-    vendas = dlt.read("bronze_vendas")
-    clientes = dlt.read("bronze_clientes")
-    produtos = dlt.read("bronze_produtos")
-    
-    metrics = spark.createDataFrame([
-        ("bronze_vendas", vendas.count()),
-        ("bronze_clientes", clientes.count()),
-        ("bronze_produtos", produtos.count())
-    ], ["table_name", "record_count"])
-    
-    return metrics.withColumn("timestamp", current_timestamp())ity_checks():
-    """
-    Checks de qualidade para garantir dados válidos.
-    """
-    pass
+    @dlt.table(name="bronze_produtos", comment="Dados de teste")
+    def bronze_test_produtos():
+        data = [
+            (200, "Produto X", "Eletrônicos", 1500.00),
+            (201, "Produto Y", "Eletrônicos", 2000.00),
+            (202, "Produto Z", "Livros", 45.50),
+        ]
+        df = spark.createDataFrame(data, ["id", "nome", "categoria", "preco"])
+        return df.withColumn("_ingestion_timestamp", current_timestamp()).withColumn("_environment", lit(ENVIRONMENT))
