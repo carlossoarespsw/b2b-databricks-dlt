@@ -12,8 +12,6 @@ RECORD_LIMIT = 1000000
 SOURCE_SYSTEM = "VCN"
 
 # COMMAND ----------
-# Note: Schema creation is handled by setup_vcn_catalog notebook (runs before this pipeline)
-# COMMAND ----------
 
 try:
     tables_query = f"""
@@ -29,6 +27,22 @@ try:
 except Exception as e:
     print(f"[AVISO] VCN indisponível: {e}")
     table_names = []
+
+# COMMAND ----------
+
+# Dummy table to ensure pipeline is valid (at least one table required)
+@dlt.table(
+    name="vcn_metadata",
+    catalog=DEST_CATALOG,
+    schema=DEST_SCHEMA,
+    comment="VCN Pipeline Metadata",
+    table_properties={"quality": "bronze", "type": "metadata"}
+)
+def vcn_metadata_table():
+    from datetime import datetime
+    return spark.createDataFrame([
+        (ENVIRONMENT, SOURCE_CATALOG, datetime.now().isoformat(), len(table_names))
+    ], ["environment", "source_catalog", "execution_time", "tables_discovered"])
 
 # COMMAND ----------
 
