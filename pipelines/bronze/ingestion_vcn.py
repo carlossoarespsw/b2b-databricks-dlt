@@ -1,32 +1,54 @@
 # Databricks notebook source
 
-import dlt
-from pyspark.sql.functions import current_timestamp, lit
+import re
+from pathlib import Path
 
-ENVIRONMENT = spark.conf.get("environment", "dev")
-SOURCE_CATALOG = "vcn-federated"
-SOURCE_SCHEMA = "public"
-DEST_CATALOG = "vcn-catalog"
-DEST_SCHEMA = "bronze"
-RECORD_LIMIT = 1000000
+import dlt
+import yaml
+from pyspark.sql.functions import col, current_timestamp, lit
+
+ENVIRONMENT = spark.conf.get("pipeline.env", "dev")
+DEV_SAMPLE_LIMIT = int(spark.conf.get("pipeline.dev_sample_limit", "100000"))
 SOURCE_SYSTEM = "VCN"
 
 # COMMAND ----------
 
-try:
-    tables_query = f"""
-    SELECT DISTINCT table_name 
-    FROM {SOURCE_CATALOG}.information_schema.tables 
-    WHERE table_schema = '{SOURCE_SCHEMA}'
-    AND table_type = 'BASE TABLE'
-    ORDER BY table_name
-    """
-    tables_result = spark.sql(tables_query).collect()
-    table_names = [row["table_name"] for row in tables_result]
-    print(f"[INFO] Ingestão VCN: {len(table_names)} tabelas descobertas de {SOURCE_CATALOG}")
-except Exception as e:
-    print(f"[AVISO] VCN indisponível: {e}")
-    table_names = []
+def _resolve_config_path() -> Path:
+    candidates = []
+    if "__file__" in globals():
+        base_dir = Path(__file__).resolve().parent
+        candidates.extend([
+            base_dir.parent.parent / "config" / "tables_vcn.yaml",
+            base_dir.parent / "config" / "tables_vcn.yaml",
+        ])
+    candidates.extend([
+        Path("config") / "tables_vcn.yaml",
+        Path("../config/tables_vcn.yaml"),
+        Path("../../config/tables_vcn.yaml"),
+    ])
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError("tables_vcn.yaml not found. Check pipeline source path.")
+
+
+def _is_clean_table_name(name: str) -> bool:
+    if name.lower().endswith("_bkp"):
+        return False
+    if re.search(r"\d{8}", name):
+        return False
+    return True
+
+
+config_path = _resolve_config_path()
+with open(config_path, "r", encoding="utf-8") as config_file:
+    config = yaml.safe_load(config_file)
+
+SOURCE_CATALOG = config.get("source_catalog", "vcn-federated")
+DEST_CATALOG = config.get("target_catalog", "vcn-catalog")
+DEST_SCHEMA = config.get("target_schema", "bronze")
+TABLES = [t for t in config.get("tables", []) if _is_clean_table_name(t.get("name", ""))]
 
 # COMMAND ----------
 
@@ -41,36 +63,68 @@ except Exception as e:
 def vcn_metadata_table():
     from datetime import datetime
     return spark.createDataFrame([
-        (ENVIRONMENT, SOURCE_CATALOG, datetime.now().isoformat(), len(table_names))
+        (ENVIRONMENT, SOURCE_CATALOG, datetime.now().isoformat(), len(TABLES))
     ], ["environment", "source_catalog", "execution_time", "tables_discovered"])
 
 # COMMAND ----------
 
-for table_name in table_names:
-    @dlt.table(
-        name=f"vcn_{table_name}",
-        catalog=DEST_CATALOG,
-        schema=DEST_SCHEMA,
-        comment=f"VCN: {SOURCE_CATALOG}.{SOURCE_SCHEMA}.{table_name}",
-        table_properties={
-            "quality": "bronze",
-            "source_system": SOURCE_SYSTEM,
-            "pipelines.autoOptimize.managed": "true",
-            "source_catalog": SOURCE_CATALOG,
-            "source_schema": SOURCE_SCHEMA,
-            "source_table": table_name,
-            "environment": ENVIRONMENT
-        }
-    )
-    def create_bronze_vcn_table(src_catalog=SOURCE_CATALOG, src_schema=SOURCE_SCHEMA, tbl_name=table_name, source_system=SOURCE_SYSTEM):
-        source_table = f"{src_catalog}.{src_schema}.{tbl_name}"
-        df = spark.read.table(source_table).limit(RECORD_LIMIT)
-        
-        df = df.withColumn("_ingestion_timestamp", current_timestamp())
-        df = df.withColumn("_source_system", lit(source_system))
-        df = df.withColumn("_source_catalog", lit(src_catalog))
-        df = df.withColumn("_source_schema", lit(src_schema))
-        df = df.withColumn("_source_table", lit(tbl_name))
-        df = df.withColumn("_environment", lit(ENVIRONMENT))
-        
-        return df
+for table_info in TABLES:
+    table_name = table_info["name"]
+    schema_name = table_info.get("schema", "public")
+    strategy = table_info.get("strategy", "full_limit")
+    target_table_name = f"{schema_name}_{table_name}"
+    source_table = f"{SOURCE_CATALOG}.{schema_name}.{table_name}"
+
+    if strategy == "scd_type_1":
+        view_name = f"view_{target_table_name}"
+
+        @dlt.view(name=view_name)
+        def read_source(src_table=source_table):
+            df = spark.read.table(src_table)
+            if ENVIRONMENT == "dev":
+                return df.limit(DEV_SAMPLE_LIMIT)
+            return df
+
+        dlt.create_streaming_table(
+            name=target_table_name,
+            catalog=DEST_CATALOG,
+            schema=DEST_SCHEMA,
+            comment=f"Bronze merge: {source_table}",
+            table_properties={
+                "quality": "bronze",
+                "source_system": SOURCE_SYSTEM,
+                "source_catalog": SOURCE_CATALOG,
+                "source_schema": schema_name,
+                "source_table": table_name,
+                "environment": ENVIRONMENT,
+            },
+        )
+
+        dlt.apply_changes(
+            target=f"{DEST_CATALOG}.{DEST_SCHEMA}.{target_table_name}",
+            source=view_name,
+            keys=table_info["primary_keys"],
+            sequence_by=col(table_info["watermark_column"]),
+            stored_as_scd_type=1,
+        )
+    else:
+        @dlt.table(
+            name=target_table_name,
+            catalog=DEST_CATALOG,
+            schema=DEST_SCHEMA,
+            comment=f"Bronze snapshot: {source_table}",
+            table_properties={
+                "quality": "bronze",
+                "source_system": SOURCE_SYSTEM,
+                "pipelines.autoOptimize.managed": "true",
+                "source_catalog": SOURCE_CATALOG,
+                "source_schema": schema_name,
+                "source_table": table_name,
+                "environment": ENVIRONMENT,
+            },
+        )
+        def ingestion_simple(src_table=source_table):
+            df = spark.read.table(src_table)
+            if ENVIRONMENT == "dev":
+                return df.limit(DEV_SAMPLE_LIMIT)
+            return df

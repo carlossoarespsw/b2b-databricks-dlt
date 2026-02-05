@@ -1,0 +1,38 @@
+source_catalog: "vcn-federated"
+target_catalog: "vcn-catalog"
+target_schema: "bronze"
+
+tables:
+  # --- AS GIGANTES (Merge Inteligente) ---
+  - name: "vcn_request"
+    schema: "public"
+    strategy: "scd_type_1"
+    primary_keys: ["vcn_request_id"]
+    watermark_column: "last_modified"
+
+  - name: "vcn_request_message"
+    schema: "public"
+    strategy: "scd_type_1"
+    primary_keys: ["vcn_request_message_id"]
+    watermark_column: "last_modified"
+
+  - name: "vcn_request_financial_trans"
+    schema: "public"
+    strategy: "scd_type_1"
+    primary_keys: ["vcn_request_financial_trans_id"]
+    watermark_column: "last_modified"
+
+  - name: "real_card_financial_data"
+    schema: "public"
+    strategy: "scd_type_1"
+    primary_keys: ["real_card_financial_data_id"]
+    watermark_column: "last_modified"
+
+  # --- AS PEQUENAS (Carga Total) ---
+  - name: "company_system_user"
+    schema: "public"
+    strategy: "full_limit"
+
+  - name: "translation_code"
+    schema: "public"
+    strategy: "full_limit"
