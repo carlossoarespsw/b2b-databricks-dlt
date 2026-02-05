@@ -14,7 +14,7 @@ SOURCE_SYSTEM = "VCN"
 # COMMAND ----------
 
 if ENVIRONMENT == "dev":
-    spark.sql(f"CREATE SCHEMA IF NOT EXISTS {DEST_CATALOG}.{DEST_SCHEMA}")
+    spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{DEST_CATALOG}`.`{DEST_SCHEMA}`")
     print(f"[INFO] Schema {DEST_CATALOG}.{DEST_SCHEMA} pronto")
 
 # COMMAND ----------
