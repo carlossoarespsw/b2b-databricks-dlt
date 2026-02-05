@@ -6,8 +6,8 @@ from pyspark.sql.functions import current_timestamp, lit
 ENVIRONMENT = spark.conf.get("environment", "dev")
 SOURCE_CATALOG = "vcn-federated"
 SOURCE_SCHEMA = "public"
-DEST_CATALOG = "vcn-federated"
-DEST_SCHEMA = "bronze"
+DEST_CATALOG = "development"
+DEST_SCHEMA = "vcn_bronze"
 RECORD_LIMIT = 1000000
 SOURCE_SYSTEM = "VCN"
 
