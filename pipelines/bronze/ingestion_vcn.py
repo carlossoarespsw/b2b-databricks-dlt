@@ -12,11 +12,7 @@ RECORD_LIMIT = 1000000
 SOURCE_SYSTEM = "VCN"
 
 # COMMAND ----------
-
-if ENVIRONMENT == "dev":
-    spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{DEST_CATALOG}`.`{DEST_SCHEMA}`")
-    print(f"[INFO] Schema {DEST_CATALOG}.{DEST_SCHEMA} pronto")
-
+# Note: Schema creation is handled by setup_vcn_catalog notebook (runs before this pipeline)
 # COMMAND ----------
 
 try:
