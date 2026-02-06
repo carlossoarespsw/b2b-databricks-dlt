@@ -126,7 +126,6 @@ for table in TABLES:
             keys=keys,
             sequence_by=col(watermark),
             stored_as_scd_type=1,
-            apply_as_deletes=False,
         )
 
     else:
