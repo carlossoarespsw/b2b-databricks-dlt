@@ -9,13 +9,8 @@ tables:
 # =========================
 # FINANCIAL_MANAGER
 # =========================
-- schema: financial_manager
-  name: account_payable
-  keys: [account_payable_id]
-
-- schema: financial_manager
-  name: batch_account_payable
-  keys: [batch_account_payable_id]
+- { schema: financial_manager, name: account_payable, keys: [account_payable_id] }
+- { schema: financial_manager, name: batch_account_payable, keys: [batch_account_payable_id] }
 
 # =========================
 # PUBLIC — ENTIDADES PRINCIPAIS
@@ -46,7 +41,6 @@ tables:
 - { schema: public, name: company_vcn_provider_bank, keys: [company_vcn_provider_bank_id] }
 - { schema: public, name: country, keys: [country_id] }
 - { schema: public, name: customer, keys: [customer_id] }
-- { schema: public, name: customer_agency_user_access, keys: [customer_agency_user_access_id] }
 - { schema: public, name: hotel, keys: [hotel_id] }
 - { schema: public, name: merchant_category_code, keys: [merchant_category_code_id] }
 - { schema: public, name: permission, keys: [permission_id] }
@@ -55,21 +49,27 @@ tables:
 - { schema: public, name: person_mail, keys: [person_mail_id] }
 - { schema: public, name: person_phone, keys: [person_phone_id] }
 - { schema: public, name: product, keys: [product_id] }
-- { schema: public, name: product_attribute, keys: [product_attribute_id] }
 - { schema: public, name: product_sub_category, keys: [product_sub_category_id] }
 - { schema: public, name: real_card, keys: [real_card_id] }
 - { schema: public, name: real_card_financial_data, keys: [real_card_financial_data_id] }
 - { schema: public, name: role, keys: [role_id] }
-- { schema: public, name: role_permission, keys: [role_permission_id] }
 - { schema: public, name: service_async_process, keys: [service_async_process_id] }
 - { schema: public, name: srv_contractor_rcn_user, keys: [srv_contractor_rcn_user_id] }
 - { schema: public, name: srv_contractor_system_user, keys: [srv_contractor_system_user_id] }
 - { schema: public, name: state, keys: [state_id] }
 - { schema: public, name: supplier, keys: [supplier_id] }
 - { schema: public, name: system_user, keys: [system_user_id] }
-- { schema: public, name: system_user_role, keys: [system_user_role_id] }
 - { schema: public, name: translation_code, keys: [translation_code_id] }
 - { schema: public, name: user_vcn_draft_approval_val, keys: [user_vcn_draft_approval_val_id] }
+
+# =========================
+# TABELAS DE RELACIONAMENTO (PK TÉCNICA)
+# =========================
+- { schema: public, name: role_permission, keys: [role_permission_id] }
+- { schema: public, name: system_user_role, keys: [system_user_role_id] }
+- { schema: public, name: product_attribute, keys: [product_attribute_id] }
+- { schema: public, name: company_div_system_user, keys: [company_div_system_user_id] }
+- { schema: public, name: customer_agency_user_access, keys: [customer_agency_user_access_id] }
 
 # =========================
 # VCN
@@ -91,31 +91,11 @@ tables:
 - { schema: public, name: vcn_template_field, keys: [vcn_template_field_id] }
 
 # =========================
-# TABELAS COM LAST_UPDATE
+# TABELAS COM WATERMARK DIFERENTE
 # =========================
-- schema: public
-  name: vbi_app
-  watermark_column: last_update
-  keys: [app_id]
-
-- schema: public
-  name: vbi_supplier
-  watermark_column: last_update
-  keys: [supplier_id]
-
-- schema: public
-  name: vbi_vcn_not_used
-  watermark_column: last_update
-  keys: [real_card_id, supplier_id, app_id]
-
-# =========================
-# RELACIONAMENTOS (PK COMPOSTA)
-# =========================
-- { schema: public, name: company_div_system_user, keys: [company_division_id, system_user_id] }
-- { schema: public, name: role_permission, keys: [role_id, permission_id] }
-- { schema: public, name: system_user_role, keys: [system_user_id, role_id] }
-- { schema: public, name: product_attribute, keys: [product_id, attribute_id] }
-- { schema: public, name: customer_agency_user_access, keys: [company_relation_id, system_user_id] }
+- { schema: public, name: vbi_app, watermark_column: last_update, keys: [app_id] }
+- { schema: public, name: vbi_supplier, watermark_column: last_update, keys: [supplier_id] }
+- { schema: public, name: vbi_vcn_not_used, watermark_column: last_update, keys: [real_card_id, supplier_id, app_id] }
 
 # =========================
 # VIEWS → SNAPSHOT
