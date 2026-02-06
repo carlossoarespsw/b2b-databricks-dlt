@@ -55,10 +55,13 @@ TABLES = [t for t in config.get("tables", []) if _is_clean_table_name(t.get("nam
 # Dummy table to ensure pipeline is valid (at least one table required)
 @dlt.table(
     name="vcn_metadata",
-    catalog=DEST_CATALOG,
-    schema=DEST_SCHEMA,
     comment="VCN Pipeline Metadata",
-    table_properties={"quality": "bronze", "type": "metadata"}
+    table_properties={
+        "quality": "bronze",
+        "type": "metadata",
+        "target_catalog": DEST_CATALOG,
+        "target_schema": DEST_SCHEMA,
+    }
 )
 def vcn_metadata_table():
     from datetime import datetime
@@ -87,8 +90,6 @@ for table_info in TABLES:
 
         dlt.create_streaming_table(
             name=target_table_name,
-            catalog=DEST_CATALOG,
-            schema=DEST_SCHEMA,
             comment=f"Bronze merge: {source_table}",
             table_properties={
                 "quality": "bronze",
@@ -97,11 +98,13 @@ for table_info in TABLES:
                 "source_schema": schema_name,
                 "source_table": table_name,
                 "environment": ENVIRONMENT,
+                "target_catalog": DEST_CATALOG,
+                "target_schema": DEST_SCHEMA,
             },
         )
 
         dlt.apply_changes(
-            target=f"{DEST_CATALOG}.{DEST_SCHEMA}.{target_table_name}",
+            target=target_table_name,
             source=view_name,
             keys=table_info["primary_keys"],
             sequence_by=col(table_info["watermark_column"]),
@@ -110,8 +113,6 @@ for table_info in TABLES:
     else:
         @dlt.table(
             name=target_table_name,
-            catalog=DEST_CATALOG,
-            schema=DEST_SCHEMA,
             comment=f"Bronze snapshot: {source_table}",
             table_properties={
                 "quality": "bronze",
@@ -121,6 +122,8 @@ for table_info in TABLES:
                 "source_schema": schema_name,
                 "source_table": table_name,
                 "environment": ENVIRONMENT,
+                "target_catalog": DEST_CATALOG,
+                "target_schema": DEST_SCHEMA,
             },
         )
         def ingestion_simple(src_table=source_table):
