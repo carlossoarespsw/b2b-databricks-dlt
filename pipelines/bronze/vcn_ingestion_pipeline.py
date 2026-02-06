@@ -19,8 +19,31 @@ def fqtn(catalog: str, schema: str, table: str) -> str:
     return f"`{catalog}`.`{schema}`.`{table}`"
 
 
-CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "tables_vcn.yaml"
-with CONFIG_PATH.open("r", encoding="utf-8") as handle:
+def _resolve_config_path() -> Path:
+    try:
+        nb_path = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+        repo_root = (Path("/Workspace") / nb_path.lstrip("/")).parents[2]
+        repo_config = repo_root / "config" / "tables_vcn.yaml"
+        if repo_config.exists():
+            return repo_config
+    except Exception:
+        pass
+
+    filestore_config = Path("/dbfs/FileStore/config/tables_vcn.yaml")
+    if filestore_config.exists():
+        return filestore_config
+
+    cwd = Path.cwd().resolve()
+    for base in [cwd, *cwd.parents]:
+        candidate = base / "config" / "tables_vcn.yaml"
+        if candidate.exists():
+            return candidate
+
+    raise FileNotFoundError("config/tables_vcn.yaml not found in repo or FileStore")
+
+
+config_path = _resolve_config_path()
+with config_path.open("r", encoding="utf-8") as handle:
     config = yaml.safe_load(handle)
 
 SOURCE_CATALOG = config["source_catalog"]
@@ -108,3 +131,5 @@ for table in TABLES:
 
     else:
         make_snapshot_table(SOURCE_CATALOG, schema_name, table_name, target_table_name, source_fq)
+
+
