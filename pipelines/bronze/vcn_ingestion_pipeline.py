@@ -1,6 +1,8 @@
 # Databricks notebook source
 from __future__ import annotations
 
+# COMMAND ----------
+
 from pathlib import Path
 import dlt
 import yaml
@@ -9,6 +11,8 @@ from pyspark.sql.functions import col, current_timestamp
 ENVIRONMENT = spark.conf.get("pipeline.env", "dev")
 DEV_SAMPLE_LIMIT = 100_000
 SOURCE_SYSTEM = "VCN"
+
+# COMMAND ----------
 
 
 def fqtn(catalog: str, schema: str, table: str) -> str:
@@ -22,6 +26,8 @@ with CONFIG_PATH.open("r", encoding="utf-8") as handle:
 SOURCE_CATALOG = config["source_catalog"]
 DEFAULTS = config.get("defaults", {})
 TABLES = config.get("tables", [])
+
+# COMMAND ----------
 
 
 def _read_source(catalog: str, schema: str, table: str):
@@ -53,6 +59,8 @@ def make_snapshot_table(catalog, schema_name, table_name, target_table_name, sou
     def snapshot_table():
         return _read_source(catalog, schema_name, table_name)
     return snapshot_table
+
+# COMMAND ----------
 
 
 for table in TABLES:
