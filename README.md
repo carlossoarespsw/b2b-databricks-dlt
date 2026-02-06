@@ -38,6 +38,28 @@ b2b-databricks-dlt/
 3. **DLT Pipeline**: A pipeline DLT executa o código sincronizado
 4. **Job**: O job orquestra a execução da pipeline
 
+## 🧭 Resumo Operacional por Ambiente (DLT VCN)
+
+### 🟢 DEV - Laboratorio
+- **Comportamento**: Amostragem rapida
+- **Volume**: N registros (ex: 100.000 linhas) de qualquer epoca
+- **Objetivo**: Validar estrutura, colunas e logica sem custo alto
+- **Disparo**: Manual
+
+### 🟡 STAGING - Ensaio Geral
+- **Comportamento**: Espelho de producao
+- **Volume**: Volume real
+- **Logica**: SCD Type 1 nas gigantes e Full Load nas pequenas
+- **Objetivo**: Testar performance e CDC antes de release
+- **Disparo**: Manual ou via CI/CD
+
+### 🔴 PROD - Vida Real
+- **Comportamento**: Automatico e incremental
+- **Volume**: Deltas diarios apos a carga inicial
+- **Logica**: DLT gerencia estado com base em last_modified
+- **Objetivo**: Manter Lakehouse atualizado
+- **Disparo**: Agendado (ex: 01:00)
+
 ## 🏗️ Arquitetura Medalhão
 
 ### Bronze (Raw Data)
