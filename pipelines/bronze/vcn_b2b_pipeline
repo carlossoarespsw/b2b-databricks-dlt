@@ -21,7 +21,7 @@ def create_table(table_conf):
     schema_name = table_conf["schema"]
     table_name = table_conf["name"]
 
-    source_fqn = f"{SOURCE_CATALOG}.{schema_name}.{table_name}"
+    source_fqn = f"`{SOURCE_CATALOG}`.`{schema_name}`.`{table_name}`"
 
     @dlt.table(
         name=table_name,
@@ -32,12 +32,13 @@ def create_table(table_conf):
             "environment": ENVIRONMENT,
         },
     )
-    def load_table(source_fqn=source_fqn):  # fixa valor por tabela
+    def load_table(source_fqn=source_fqn):
         return (
             spark.read.table(source_fqn)
             .withColumn("_ingestion_ts", current_timestamp())
         )
 
 # COMMAND ----------
+
 for t in TABLES:
     create_table(t)
