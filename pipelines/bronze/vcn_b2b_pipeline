@@ -1,9 +1,11 @@
+# Databricks notebook source
 import dlt
 import yaml
 from pyspark.sql.functions import current_timestamp
 
+# COMMAND ----------
 # Caminho correto no DLT (Repo)
-config_path = "/Workspace/Repos/sp_b2b_ops_bot/b2b-databricks-dlt-dev/config/tables_vcn_b2b.yaml"
+config_path = "/Repos/sp_b2b_ops_bot/b2b-databricks-dlt-dev/config/tables_vcn_b2b.yaml"
 
 with open(config_path, "r") as f:
     config = yaml.safe_load(f)
@@ -14,7 +16,7 @@ TABLES = config.get("tables", [])
 ENVIRONMENT = spark.conf.get("pipeline.env", "dev")
 SOURCE_SYSTEM = "VCN_B2B"
 
-
+# COMMAND ----------
 def create_table(table_conf):
     schema_name = table_conf["schema"]
     table_name = table_conf["name"]
@@ -36,6 +38,6 @@ def create_table(table_conf):
             .withColumn("_ingestion_ts", current_timestamp())
         )
 
-
+# COMMAND ----------
 for t in TABLES:
     create_table(t)
