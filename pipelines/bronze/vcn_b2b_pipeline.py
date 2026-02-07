@@ -25,23 +25,23 @@ def _resolve_config_path() -> Path:
     try:
         nb_path = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
         repo_root = (Path("/Workspace") / nb_path.lstrip("/")).parents[2]
-        repo_config = repo_root / "config" / "tables_vcn.yaml"
+        repo_config = repo_root / "config" / "tables_vcn_b2b.yaml"
         if repo_config.exists():
             return repo_config
     except Exception:
         pass
 
-    filestore_config = Path("/dbfs/FileStore/config/tables_vcn.yaml")
+    filestore_config = Path("/dbfs/FileStore/config/tables_vcn_b2b.yaml")
     if filestore_config.exists():
         return filestore_config
 
     cwd = Path.cwd().resolve()
     for base in [cwd, *cwd.parents]:
-        candidate = base / "config" / "tables_vcn.yaml"
+        candidate = base / "config" / "tables_vcn_b2b.yaml"
         if candidate.exists():
             return candidate
 
-    raise FileNotFoundError("config/tables_vcn.yaml not found in repo or FileStore")
+    raise FileNotFoundError("config/tables_vcn_b2b.yaml not found in repo or FileStore")
 
 
 config_path = _resolve_config_path()
@@ -109,7 +109,7 @@ for table in TABLES:
     strategy = table.get("strategy", DEFAULTS.get("strategy", "snapshot"))
     watermark = table.get("watermark_column", DEFAULTS.get("watermark_column"))
 
-    target_table_name = f"{schema_name}__{table_name}"
+    target_table_name = f"b2b__{table_name}"
     source_fq = fqtn(SOURCE_CATALOG, schema_name, table_name)
 
     use_incremental = strategy == "incremental" and watermark
