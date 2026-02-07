@@ -5,7 +5,7 @@ from pyspark.sql.functions import current_timestamp
 
 # COMMAND ----------
 # Caminho correto no DLT (Repo)
-config_path = "/Repos/sp_b2b_ops_bot/b2b-databricks-dlt-dev/config/tables_vcn_b2b.yaml"
+config_path = "/Workspace/Repos/sp_b2b_ops_bot/b2b-databricks-dlt-dev/config/tables_vcn_b2b.yaml"
 
 with open(config_path, "r") as f:
     config = yaml.safe_load(f)
