@@ -1,0 +1,84 @@
+source_catalog: vcn-federated
+
+defaults:
+  strategy: incremental
+  watermark_column: last_modified
+
+tables:
+
+# =========================
+# FINANCIAL_MANAGER
+# =========================
+- { schema: financial_manager, name: account_payable, keys: [account_payable_id] }
+- { schema: financial_manager, name: batch_account_payable, keys: [batch_account_payable_id] }
+
+# =========================
+# PUBLIC
+# =========================
+- { schema: public, name: agency, keys: [agency_id] }
+- { schema: public, name: air, keys: [air_id] }
+- { schema: public, name: api_key_user, keys: [api_key_user_id] }
+- { schema: public, name: app, keys: [app_id] }
+- { schema: public, name: app_terms, keys: [app_terms_id] }
+- { schema: public, name: attachment, keys: [attachment_id] }
+- { schema: public, name: attachment_entity, keys: [attachment_entity_id] }
+- { schema: public, name: attribute, keys: [attribute_id] }
+- { schema: public, name: bank, keys: [bank_id] }
+- { schema: public, name: bank_slip, keys: [bank_slip_id] }
+- { schema: public, name: car_rental, keys: [car_rental_id] }
+- { schema: public, name: card_brand, keys: [card_brand_id] }
+- { schema: public, name: city, keys: [city_id] }
+- { schema: public, name: comp_group_srv_provider_rcn, keys: [comp_group_srv_provider_rcn_id] }
+- { schema: public, name: company, keys: [company_id] }
+- { schema: public, name: company_div_system_user, keys: [company_div_system_user_id] }
+- { schema: public, name: company_division, keys: [company_division_id] }
+- { schema: public, name: company_division_group, keys: [company_division_group_id] }
+- { schema: public, name: company_group, keys: [company_group_id] }
+- { schema: public, name: company_group_srv_provider, keys: [company_group_srv_provider_id] }
+- { schema: public, name: company_relation, keys: [company_relation_id] }
+- { schema: public, name: company_released, keys: [company_released_id] }
+- { schema: public, name: company_system_user, keys: [company_system_user_id] }
+- { schema: public, name: company_type, keys: [company_type_id] }
+- { schema: public, name: company_vcn_provider_bank, keys: [company_vcn_provider_bank_id] }
+- { schema: public, name: counter, keys: [counter_id] }
+- { schema: public, name: country, keys: [country_id] }
+- { schema: public, name: customer, keys: [customer_id] }
+- { schema: public, name: customer_agency_user_access, keys: [customer_agency_user_access_id] }
+- { schema: public, name: hotel, keys: [hotel_id] }
+- { schema: public, name: merchant_category_code, keys: [merchant_category_code_id] }
+- { schema: public, name: permission, keys: [permission_id] }
+- { schema: public, name: person, keys: [person_id] }
+- { schema: public, name: person_address, keys: [person_address_id] }
+- { schema: public, name: person_mail, keys: [person_mail_id] }
+- { schema: public, name: person_phone, keys: [person_phone_id] }
+- { schema: public, name: product, keys: [product_id] }
+- { schema: public, name: product_attribute, keys: [product_attribute_id] }
+- { schema: public, name: product_sub_category, keys: [product_sub_category_id] }
+- { schema: public, name: real_card, keys: [real_card_id] }
+- { schema: public, name: real_card_financial_data, keys: [real_card_financial_data_id] }
+- { schema: public, name: role, keys: [role_id] }
+- { schema: public, name: role_permission, keys: [role_permission_id] }
+- { schema: public, name: service_async_process, keys: [service_async_process_id] }
+- { schema: public, name: srv_contractor_rcn_user, keys: [srv_contractor_rcn_user_id] }
+- { schema: public, name: srv_contractor_system_user, keys: [srv_contractor_system_user_id] }
+- { schema: public, name: state, keys: [state_id] }
+- { schema: public, name: supplier, keys: [supplier_id] }
+- { schema: public, name: system_user, keys: [system_user_id] }
+- { schema: public, name: system_user_role, keys: [system_user_role_id] }
+- { schema: public, name: translation_code, keys: [translation_code_id] }
+- { schema: public, name: user_vcn_draft_approval_val, keys: [user_vcn_draft_approval_val_id] }
+- { schema: public, name: vcn_access_token, keys: [vcn_access_token_id] }
+- { schema: public, name: vcn_access_token_recipient, keys: [vcn_access_token_recipient_id] }
+- { schema: public, name: vcn_access_token_record, keys: [vcn_access_token_record_id] }
+- { schema: public, name: vcn_control_group, keys: [vcn_control_group_id] }
+- { schema: public, name: vcn_provider, keys: [vcn_provider_id] }
+- { schema: public, name: vcn_provider_bank, keys: [vcn_provider_bank_id] }
+- { schema: public, name: vcn_provider_card_brand, keys: [vcn_provider_card_brand_id] }
+- { schema: public, name: vcn_request, keys: [vcn_request_id] }
+- { schema: public, name: vcn_request_draft, keys: [vcn_request_draft_id] }
+- { schema: public, name: vcn_request_draft_state, keys: [vcn_request_draft_state_id] }
+- { schema: public, name: vcn_request_financial_trans, keys: [vcn_request_financial_trans_id] }
+- { schema: public, name: vcn_request_message, keys: [vcn_request_message_id] }
+- { schema: public, name: vcn_request_supplier, keys: [vcn_request_supplier_id] }
+- { schema: public, name: vcn_template, keys: [vcn_template_id] }
+- { schema: public, name: vcn_template_field, keys: [vcn_template_field_id] }
