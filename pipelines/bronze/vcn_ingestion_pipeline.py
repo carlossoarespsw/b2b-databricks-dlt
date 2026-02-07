@@ -7,6 +7,8 @@ from pathlib import Path
 import dlt
 import yaml
 from pyspark.sql.functions import col, current_timestamp
+from pyspark.sql.utils import AnalysisException
+from pyspark.sql.types import StructType
 
 ENVIRONMENT = spark.conf.get("pipeline.env", "dev")
 DEV_SAMPLE_LIMIT = 100_000
@@ -54,12 +56,26 @@ TABLES = config.get("tables", [])
 
 
 def _read_source(catalog: str, schema: str, table: str):
-    df = spark.read.table(fqtn(catalog, schema, table))
-    df = df.withColumn("_ingestion_ts", current_timestamp())
+    source_name = fqtn(catalog, schema, table)
 
-    if ENVIRONMENT == "dev":
-        return df.limit(DEV_SAMPLE_LIMIT)
-    return df
+    try:
+        df = spark.read.format("delta").table(source_name)
+        df = df.withColumn("_ingestion_ts", current_timestamp())
+
+        if ENVIRONMENT == "dev":
+            return df.limit(DEV_SAMPLE_LIMIT)
+
+        return df
+
+    except Exception as e:
+        print(f"⚠️ ERRO AO LER {source_name}")
+        print(str(e))
+
+        # cria dataframe vazio para não quebrar o pipeline
+        empty_df = spark.createDataFrame([], StructType([])) \
+                        .withColumn("_ingestion_ts", current_timestamp())
+
+        return empty_df
 
 
 def make_source_view(catalog, schema_name, table_name, view_name):
