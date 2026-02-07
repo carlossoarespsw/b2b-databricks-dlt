@@ -28,8 +28,8 @@ def create_table(table_conf):
         comment=f"Full load from {source_fqn}",
         table_properties={
             "quality": "bronze",
-            "source_system": SOURCE_SYSTEM,
-            "environment": ENVIRONMENT,
+            "source_system": str(SOURCE_SYSTEM) if SOURCE_SYSTEM is not None else "",
+            "environment": str(ENVIRONMENT) if ENVIRONMENT is not None else "",
         },
     )
     def load_table(source_fqn=source_fqn):
