@@ -59,7 +59,7 @@ def _read_source(catalog: str, schema: str, table: str):
     source_name = fqtn(catalog, schema, table)
 
     try:
-        df = spark.read.format("delta").table(source_name)
+        df = spark.read.table(source_name)
         df = df.withColumn("_ingestion_ts", current_timestamp())
 
         if ENVIRONMENT == "dev":
@@ -68,14 +68,8 @@ def _read_source(catalog: str, schema: str, table: str):
         return df
 
     except Exception as e:
-        print(f"⚠️ ERRO AO LER {source_name}")
-        print(str(e))
-
-        # cria dataframe vazio para não quebrar o pipeline
-        empty_df = spark.createDataFrame([], StructType([])) \
-                        .withColumn("_ingestion_ts", current_timestamp())
-
-        return empty_df
+        print(f"ERRO AO LER {source_name}")
+        raise e
 
 
 def make_source_view(catalog, schema_name, table_name, view_name):
@@ -109,7 +103,7 @@ for table in TABLES:
     strategy = table.get("strategy", DEFAULTS.get("strategy", "snapshot"))
     watermark = table.get("watermark_column", DEFAULTS.get("watermark_column"))
 
-    target_table_name = f"b2b__{table_name}"
+    target_table_name = table_name
     source_fq = fqtn(SOURCE_CATALOG, schema_name, table_name)
 
     use_incremental = strategy == "incremental" and watermark
