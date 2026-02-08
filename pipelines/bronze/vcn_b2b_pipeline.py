@@ -8,7 +8,7 @@ from pyspark.sql.types import StringType
 # COMMAND ----------
 # --- CONFIGURAÇÃO ---
 # Mantemos 1k em dev para ser instantâneo
-DEV_SAMPLE_LIMIT = 1_000 
+DEV_SAMPLE_LIMIT = 100_000 
 ENVIRONMENT = spark.conf.get("pipeline.env", "dev")
 SOURCE_SYSTEM = "VCN_B2B"
 
