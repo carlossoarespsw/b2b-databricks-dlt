@@ -2,6 +2,8 @@
 import dlt
 import yaml
 from pyspark.sql.functions import current_timestamp
+from pyspark.sql.functions import col, current_timestamp
+from pyspark.sql.types import StringType
 
 # COMMAND ----------
 # Caminho correto no DLT (Repo)
