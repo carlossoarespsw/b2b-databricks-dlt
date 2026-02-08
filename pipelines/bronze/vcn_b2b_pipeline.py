@@ -33,10 +33,26 @@ def create_table(table_conf):
         },
     )
     def load_table(source_fqn=source_fqn):
-        return (
-            spark.read.table(source_fqn)
-            .withColumn("_ingestion_ts", current_timestamp())
-        )
+        df = spark.read.table(source_fqn)
+        
+        # Varre todas as colunas. Se for texto (Varchar/Char/String), força cast para STRING ilimitado.
+        # Se for número, data, etc., mantém como está.
+        safe_columns = []
+        
+        for field in df.schema.fields:
+            # Verifica se o tipo de dado é baseado em texto
+            if isinstance(field.dataType, StringType):
+                # Força o cast para ignorar limites (ex: varchar(64) -> string)
+                safe_columns.append(col(field.name).cast("string").alias(field.name))
+            else:
+                # Mantém a coluna original
+                safe_columns.append(col(field.name))
+        
+        # Aplica a seleção segura
+        df_safe = df.select(*safe_columns)
+
+        # 3. Adiciona metadados de ingestão
+        return df_safe.withColumn("_ingestion_ts", current_timestamp())
 
 # COMMAND ----------
 
