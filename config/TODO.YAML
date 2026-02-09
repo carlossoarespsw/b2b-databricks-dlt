@@ -1,0 +1,14 @@
+- name: "account_payable"
+    schema: "financial_manager"
+    pk: "account_payable_id"
+    watermark: "last_modified"
+
+  - name: "account_payable_detail"
+    schema: "financial_manager"
+    pk: "account_payable_detail_id"
+    watermark: "last_modified"
+
+  - name: "batch_account_payable"
+    schema: "financial_manager"
+    pk: "batch_account_payable_id"
+    watermark: "last_modified"
