@@ -1,0 +1,338 @@
+source_catalog: "vcn-federated"
+tables:
+  # --- SCHEMA: financial_manager ---
+  - name: "account_payable"
+    schema: "financial_manager"
+    pk: "account_payable_id"
+    watermark: "last_modified"
+
+  - name: "account_payable_detail"
+    schema: "financial_manager"
+    pk: "account_payable_detail_id"
+    watermark: "last_modified"
+
+  - name: "batch_account_payable"
+    schema: "financial_manager"
+    pk: "batch_account_payable_id"
+    watermark: "last_modified"
+
+  # --- SCHEMA: public ---
+  - name: "agency"
+    schema: "public"
+    pk: "agency_id"
+    watermark: "last_modified"
+
+  - name: "air"
+    schema: "public"
+    pk: "air_id"
+    watermark: "last_modified"
+
+  - name: "api_key_user"
+    schema: "public"
+    pk: "api_key_user_id"
+    watermark: "last_modified"
+
+  - name: "app"
+    schema: "public"
+    pk: "app_id"
+    watermark: "last_modified"
+
+  - name: "app_terms"
+    schema: "public"
+    pk: "app_terms_id"
+    watermark: "last_modified"
+
+  - name: "attachment"
+    schema: "public"
+    pk: "attachment_id"
+    watermark: "last_modified"
+
+  - name: "attachment_entity"
+    schema: "public"
+    pk: "attachment_entity_id"
+    watermark: "last_modified"
+
+  - name: "attribute"
+    schema: "public"
+    pk: "attribute_id"
+    watermark: "last_modified"
+
+  - name: "bank"
+    schema: "public"
+    pk: "bank_id"
+    watermark: "last_modified"
+
+  - name: "bank_slip"
+    schema: "public"
+    pk: "bank_slip_id"
+    watermark: "last_modified"
+
+  - name: "car_rental"
+    schema: "public"
+    pk: "car_rental_id"
+    watermark: "last_modified"
+
+  - name: "card_brand"
+    schema: "public"
+    pk: "card_brand_id"
+    watermark: "last_modified"
+
+  - name: "city"
+    schema: "public"
+    pk: "city_id"
+    watermark: "last_modified"
+
+  - name: "company"
+    schema: "public"
+    pk: "company_id"
+    watermark: "last_modified"
+
+  - name: "company_div_system_user"
+    schema: "public"
+    pk: "company_div_system_user_id"
+    watermark: "last_modified"
+
+  - name: "company_division"
+    schema: "public"
+    pk: "company_division_id"
+    watermark: "last_modified"
+
+  - name: "company_division_group"
+    schema: "public"
+    pk: "company_division_group_id"
+    watermark: "last_modified"
+
+  - name: "company_group"
+    schema: "public"
+    pk: "company_group_id"
+    watermark: "last_modified"
+
+  - name: "company_group_srv_provider"
+    schema: "public"
+    pk: "company_group_srv_provider_id"
+    watermark: "last_modified"
+
+  - name: "company_relation"
+    schema: "public"
+    pk: "company_relation_id"
+    watermark: "last_modified"
+
+  - name: "company_released"
+    schema: "public"
+    pk: "company_released_id"
+    watermark: "last_modified"
+
+  - name: "company_system_user"
+    schema: "public"
+    pk: "company_system_user_id"
+    watermark: "last_modified"
+
+  - name: "company_type"
+    schema: "public"
+    pk: "company_type_id"
+    watermark: "last_modified"
+
+  - name: "company_vcn_provider_bank"
+    schema: "public"
+    pk: "company_vcn_provider_bank_id"
+    watermark: "last_modified"
+
+  - name: "counter"
+    schema: "public"
+    pk: "counter_id"
+    watermark: "last_modified"
+
+  - name: "country"
+    schema: "public"
+    pk: "country_id"
+    watermark: "last_modified"
+
+  - name: "customer"
+    schema: "public"
+    pk: "customer_id"
+    watermark: "last_modified"
+
+  - name: "customer_agency_user_access"
+    schema: "public"
+    pk: "customer_agency_user_access_id"
+    watermark: "last_modified"
+
+  - name: "hotel"
+    schema: "public"
+    pk: "hotel_id"
+    watermark: "last_modified"
+
+  - name: "merchant_category_code"
+    schema: "public"
+    pk: "merchant_category_code_id"
+    watermark: "last_modified"
+
+  - name: "permission"
+    schema: "public"
+    pk: "permission_id"
+    watermark: "last_modified"
+
+  - name: "person"
+    schema: "public"
+    pk: "person_id"
+    watermark: "last_modified"
+
+  - name: "person_address"
+    schema: "public"
+    pk: "person_address_id"
+    watermark: "last_modified"
+
+  - name: "person_mail"
+    schema: "public"
+    pk: "person_mail_id"
+    watermark: "last_modified"
+
+  - name: "person_phone"
+    schema: "public"
+    pk: "person_phone_id"
+    watermark: "last_modified"
+
+  - name: "product"
+    schema: "public"
+    pk: "product_id"
+    watermark: "last_modified"
+
+  - name: "product_attribute"
+    schema: "public"
+    pk: "product_attribute_id"
+    watermark: "last_modified"
+
+  - name: "product_category"
+    schema: "public"
+    pk: "product_category_id"
+    watermark: "last_modified"
+
+  - name: "product_sub_category"
+    schema: "public"
+    pk: "product_sub_category_id"
+    watermark: "last_modified"
+
+  - name: "real_card"
+    schema: "public"
+    pk: "real_card_id"
+    watermark: "last_modified"
+
+  - name: "real_card_financial_data"
+    schema: "public"
+    pk: "real_card_financial_data_id"
+    watermark: "last_modified"
+
+  - name: "role"
+    schema: "public"
+    pk: "role_id"
+    watermark: "last_modified"
+
+  - name: "role_permission"
+    schema: "public"
+    pk: "role_permission_id"
+    watermark: "last_modified"
+
+  - name: "service_async_process"
+    schema: "public"
+    pk: "service_async_process_id"
+    watermark: "last_modified"
+
+  - name: "srv_contractor_rcn_user"
+    schema: "public"
+    pk: "srv_contractor_rcn_user_id"
+    watermark: "last_modified"
+
+  - name: "srv_contractor_system_user"
+    schema: "public"
+    pk: "srv_contractor_system_user_id"
+    watermark: "last_modified"
+
+  - name: "state"
+    schema: "public"
+    pk: "state_id"
+    watermark: "last_modified"
+
+  - name: "supplier"
+    schema: "public"
+    pk: "supplier_id"
+    watermark: "last_modified"
+
+  - name: "system_user"
+    schema: "public"
+    pk: "system_user_id"
+    watermark: "last_modified"
+
+  - name: "system_user_role"
+    schema: "public"
+    pk: "system_user_role_id"
+    watermark: "last_modified"
+
+  - name: "translation_code"
+    schema: "public"
+    pk: "translation_code_id"
+    watermark: "last_modified"
+
+  - name: "user_vcn_draft_approval_val"
+    schema: "public"
+    pk: "user_vcn_draft_approval_val_id"
+    watermark: "last_modified"
+
+  - name: "vcn_access_token"
+    schema: "public"
+    pk: "vcn_access_token_id"
+    watermark: "last_modified"
+
+  - name: "vcn_access_token_recipient"
+    schema: "public"
+    pk: "vcn_access_token_recipient_id"
+    watermark: "last_modified"
+
+  - name: "vcn_access_token_record"
+    schema: "public"
+    pk: "vcn_access_token_record_id"
+    watermark: "last_modified"
+
+  - name: "vcn_control_group"
+    schema: "public"
+    pk: "vcn_control_group_id"
+    watermark: "last_modified"
+
+  - name: "vcn_provider"
+    schema: "public"
+    pk: "vcn_provider_id"
+    watermark: "last_modified"
+
+  - name: "vcn_provider_bank"
+    schema: "public"
+    pk: "vcn_provider_bank_id"
+    watermark: "last_modified"
+
+  - name: "vcn_provider_card_brand"
+    schema: "public"
+    pk: "vcn_provider_card_brand_id"
+    watermark: "last_modified"
+
+  - name: "vcn_request"
+    schema: "public"
+    pk: "vcn_request_id"
+    watermark: "last_modified"
+
+  - name: "vcn_request_draft"
+    schema: "public"
+    pk: "vcn_request_draft_id" # PK inferida com base no padrão do arquivo
+    watermark: "last_modified"
+
+  - name: "vcn_request_financial_trans"
+    schema: "public"
+    pk: "vcn_request_financial_trans_id"
+    watermark: "last_modified"
+
+  - name: "vcn_template"
+    schema: "public"
+    pk: "vcn_template_id"
+    watermark: "last_modified"
+
+  - name: "vcn_template_field"
+    schema: "public"
+    pk: "vcn_template_field_id"
+    watermark: "last_modified"
