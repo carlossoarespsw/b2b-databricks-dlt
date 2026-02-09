@@ -8,21 +8,21 @@ from pyspark.sql.types import StringType
 # COMMAND ----------
 # --- CONFIGURAÇÃO ---
 # Mantemos 1k em dev para ser instantâneo
-DEV_SAMPLE_LIMIT = 100_000 
+DEV_SAMPLE_LIMIT = 100_000
 ENVIRONMENT = spark.conf.get("pipeline.env", "dev")
-SOURCE_SYSTEM = "VCN_B2B"
+SOURCE_SYSTEM = "VCN_PUBLIC"
 
 
 # COMMAND ----------
 # Carrega YAML (código padrão que já tínhamos)
 try:
     import os
-    config_path = f"{os.getcwd()}/config/tables_vcn_b2b.yaml"
+    config_path = f"{os.getcwd()}/config/tables_vcn_public.yaml"
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
 except:
     # Caminho de fallback se necessário
-    config_path = "/Workspace/Repos/sp_b2b_ops_bot/b2b-databricks-dlt-dev/config/tables_vcn_b2b.yaml"
+    config_path = f"/Workspace/Repos/sp_b2b_ops_bot/b2b-databricks-dlt-{ENVIRONMENT}/config/tables_vcn_public.yaml"
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
 
