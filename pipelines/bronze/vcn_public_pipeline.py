@@ -274,23 +274,14 @@ def ingest_heavy_table(table_conf: dict) -> None:
 def create_table(table_conf):
     schema_name = table_conf["schema"]
     table_name = table_conf["name"]
-    partition_column = table_conf.get("partition_column") or table_conf.get("pk")
-    watermark_column = table_conf.get("watermark")
     is_heavy = bool(table_conf.get("heavy", False))
-    watermark_days = int(table_conf.get("watermark_days", 180))
 
-    allow_jdbc_fallback = not is_heavy
-    # Heavy tables: run local heavy ingestion function and read from RAW schema afterwards
     if is_heavy:
-        try:
-            ingest_heavy_table(table_conf)
-        except Exception as e:
-            print(f"Erro na ingestao heavy para {table_name}: {str(e)}")
-
-        # Source is the RAW table produced by heavy ingestion
-        source_fqn = f"`{resolve_target_catalog(schema_name)}`.`raw`.`{table_name}`"
+        source_fqn = f"{CATALOG_PUBLIC}.raw.{table_name}"
+        print(f"HEAVY table {table_name} will be read from RAW: {source_fqn}")
     else:
         source_fqn = f"`{SOURCE_CATALOG}`.`{schema_name}`.`{table_name}`"
+        print(f"Normal table {table_name} will be read from Federated: {source_fqn}")
     target_catalog = resolve_target_catalog(schema_name)
     target_schema = PIPELINE_LAYER
     target_table = f"{target_catalog}.{target_schema}.{table_name}"
@@ -313,117 +304,9 @@ def create_table(table_conf):
     def load_table(source_fqn=source_fqn):
         try:
             df = spark.read.table(source_fqn)
+            print(f"Reading source for {table_name} from {source_fqn}")
         except Exception as e:
-            if is_heavy and not allow_jdbc_fallback:
-                raise RuntimeError(
-                    f"Tabela RAW {source_fqn} nao encontrada. Rode o job heavy antes do DLT."
-                ) from e
-            print(f"Falha no federado para {table_name}. Erro: {str(e)}")
-            jdbc_url = get_jdbc_url(SOURCE_CATALOG)
-
-            if jdbc_url:
-                try:
-                    timed_url = with_jdbc_timeouts(jdbc_url)
-                    base_options = {
-                        "url": timed_url,
-                        "driver": "org.postgresql.Driver",
-                        "fetchsize": "10000",
-                        "queryTimeout": "0",
-                        "sessionInitStatement": "SET statement_timeout = 0",
-                    }
-
-                    if is_heavy and watermark_column and partition_column:
-                        print(
-                            f"Lendo tabela HEAVY {table_name} com filtro incremental e paralelismo por ID"
-                        )
-                        last_wm = get_last_loaded_watermark(
-                            target_table, watermark_column
-                        )
-                        if last_wm:
-                            cutoff_ts = format_timestamp(last_wm)
-                            watermark_filter = (
-                                f"{watermark_column} > TIMESTAMP '{cutoff_ts}'"
-                            )
-                        else:
-                            cutoff_ts = (
-                                datetime.utcnow() - timedelta(days=watermark_days)
-                            ).strftime("%Y-%m-%d %H:%M:%S")
-                            watermark_filter = (
-                                f"{watermark_column} >= TIMESTAMP '{cutoff_ts}'"
-                            )
-                        bounds = get_filtered_partition_bounds(
-                            timed_url,
-                            schema_name,
-                            table_name,
-                            partition_column,
-                            watermark_column,
-                            cutoff_ts,
-                        )
-                        if not bounds:
-                            print(
-                                f"Sem dados recentes para {table_name}, retornando vazio"
-                            )
-                            empty_schema = (
-                                spark.read.format("jdbc")
-                                .options(**base_options)
-                                .option(
-                                    "dbtable",
-                                    f"(SELECT * FROM {schema_name}.{table_name} WHERE 1=0) AS empty",
-                                )
-                                .load()
-                                .schema
-                            )
-                            df = spark.createDataFrame([], empty_schema)
-                        else:
-                            lower_bound, upper_bound = bounds
-                            range_size = max(1, int(upper_bound) - int(lower_bound))
-                            base_parts = max(
-                                4, int(spark.sparkContext.defaultParallelism // 2)
-                            )
-                            num_parts = min(base_parts, max(1, range_size // 1_000_000))
-                            query = (
-                                f"(SELECT * FROM {schema_name}.{table_name} "
-                                f"WHERE {watermark_filter}) AS src"
-                            )
-                            df = (
-                                spark.read.format("jdbc")
-                                .options(**base_options)
-                                .option("dbtable", query)
-                                .option("partitionColumn", partition_column)
-                                .option("lowerBound", str(lower_bound))
-                                .option("upperBound", str(upper_bound))
-                                .option("numPartitions", str(num_parts))
-                                .load()
-                            )
-                    else:
-                        options = base_options.copy()
-                        options["dbtable"] = f"{schema_name}.{table_name}"
-                        if partition_column:
-                            bounds = get_partition_bounds(
-                                timed_url, schema_name, table_name, partition_column
-                            )
-                            if bounds:
-                                lower_bound, upper_bound = bounds
-                                options.update(
-                                    {
-                                        "partitionColumn": partition_column,
-                                        "lowerBound": str(lower_bound),
-                                        "upperBound": str(upper_bound),
-                                        "numPartitions": str(DEFAULT_NUM_PARTITIONS),
-                                    }
-                                )
-                            else:
-                                print(
-                                    f"Sem bounds para {table_name}, leitura sem particionamento"
-                                )
-
-                        print(f"Usando JDBC para {table_name}")
-                        df = spark.read.format("jdbc").options(**options).load()
-                except Exception as jdbc_error:
-                    print(f"Falha no JDBC para {table_name}. Erro: {str(jdbc_error)}")
-                    raise
-            else:
-                raise
+            raise Exception(f"Failed reading source {source_fqn} -> {str(e)}")
 
         safe_columns = []
         for field in df.schema.fields:
