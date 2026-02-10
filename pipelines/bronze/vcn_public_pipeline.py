@@ -175,7 +175,10 @@ def create_table(table_conf):
                         step_days = max(30, total_days // max_parallel)
                         windows = generate_time_windows(start_date, end_date, step_days)
                         predicates = [
-                            f"{watermark_column} >= '{start}' AND {watermark_column} < '{end}'"
+                            (
+                                f"{watermark_column} >= TIMESTAMP '{start}' "
+                                f"AND {watermark_column} < TIMESTAMP '{end}'"
+                            )
                             for start, end in windows
                         ]
 
@@ -183,10 +186,6 @@ def create_table(table_conf):
                             spark.read.format("jdbc")
                             .options(**base_options)
                             .option("dbtable", f"{schema_name}.{table_name}")
-                            .option("numPartitions", len(predicates))
-                            .option("partitionColumn", watermark_column)
-                            .option("lowerBound", "0")
-                            .option("upperBound", "1")
                             .option("predicates", predicates)
                             .load()
                         )
@@ -194,14 +193,23 @@ def create_table(table_conf):
                         options = base_options.copy()
                         options["dbtable"] = f"{schema_name}.{table_name}"
                         if partition_column:
-                            options.update(
-                                {
-                                    "partitionColumn": partition_column,
-                                    "lowerBound": "0",
-                                    "upperBound": "1000000000",
-                                    "numPartitions": str(DEFAULT_NUM_PARTITIONS),
-                                }
+                            bounds = get_partition_bounds(
+                                timed_url, schema_name, table_name, partition_column
                             )
+                            if bounds:
+                                lower_bound, upper_bound = bounds
+                                options.update(
+                                    {
+                                        "partitionColumn": partition_column,
+                                        "lowerBound": str(lower_bound),
+                                        "upperBound": str(upper_bound),
+                                        "numPartitions": str(DEFAULT_NUM_PARTITIONS),
+                                    }
+                                )
+                            else:
+                                print(
+                                    f"Sem bounds para {table_name}, leitura sem particionamento"
+                                )
 
                         print(f"Usando JDBC para {table_name}")
                         df = spark.read.format("jdbc").options(**options).load()
