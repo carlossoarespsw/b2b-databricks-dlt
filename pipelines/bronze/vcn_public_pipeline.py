@@ -105,8 +105,8 @@ def get_filtered_partition_bounds(
     cutoff_ts,
 ):
     bounds_query = (
-        f"(SELECT MIN(\"{partition_column}\") AS min_v, "
-        f"MAX(\"{partition_column}\") AS max_v "
+        f'(SELECT MIN("{partition_column}") AS min_v, '
+        f'MAX("{partition_column}") AS max_v '
         f"FROM {schema_name}.{table_name} "
         f"WHERE {watermark_column} >= TIMESTAMP '{cutoff_ts}') AS bounds"
     )
@@ -190,16 +190,16 @@ def create_table(table_conf):
     watermark_column = table_conf.get("watermark")
     is_heavy = bool(table_conf.get("heavy", False))
     watermark_days = int(table_conf.get("watermark_days", 180))
-    
+
     # Skip heavy tables - they are ingested by separate Spark job to RAW layer
     if is_heavy:
         print(f"Skipping heavy table {table_name} - ingested by standalone job")
         return
-    
+
     source_fqn = f"`{SOURCE_CATALOG}`.`{schema_name}`.`{table_name}`"
     target_catalog = resolve_target_catalog(schema_name)
     target_schema = PIPELINE_LAYER
-    target_table = f"{target_catalog}.{target_schema}.{table_name}"`
+    target_table = f"{target_catalog}.{target_schema}.{table_name}"
     table_meta = DESCRIPTIONS.get(table_name, {})
     table_desc = table_meta.get(
         "description",
