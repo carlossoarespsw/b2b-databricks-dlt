@@ -13,9 +13,10 @@ ENVIRONMENT = spark.conf.get("pipeline.env", "dev").lower()
 PIPELINE_LAYER = spark.conf.get("pipeline.layer", "bronze").lower()
 ENV_LABEL = "gold" if ENVIRONMENT == "prod" else ENVIRONMENT
 SOURCE_SYSTEM = "VCN_PUBLIC"
+DEFAULT_NUM_PARTITIONS = 8
 
-CATALOG_PUBLIC = spark.conf.get("catalog_public", "public")
-CATALOG_FINANCIAL = spark.conf.get("catalog_financial", "financial")
+CATALOG_PUBLIC = spark.conf.get("catalog_public", f"public_vcn_{ENVIRONMENT}")
+CATALOG_FINANCIAL = spark.conf.get("catalog_financial", f"financial_vcn_{ENVIRONMENT}")
 
 
 # COMMAND ----------
@@ -44,12 +45,45 @@ def get_jdbc_url(catalog_name):
     except:
         return None
 
+def with_jdbc_timeouts(jdbc_url):
+    if "?" in jdbc_url:
+        return f"{jdbc_url}&socketTimeout=0&connectTimeout=10"
+    return f"{jdbc_url}?socketTimeout=0&connectTimeout=10"
+
+def get_partition_bounds(jdbc_url, schema_name, table_name, pk_column):
+    bounds_query = (
+        f"(SELECT MIN(\"{pk_column}\") AS min_id, "
+        f"MAX(\"{pk_column}\") AS max_id FROM {schema_name}.{table_name}) AS bounds"
+    )
+
+    df_bounds = (
+        spark.read.format("jdbc")
+        .option("url", jdbc_url)
+        .option("dbtable", bounds_query)
+        .option("driver", "org.postgresql.Driver")
+        .option("queryTimeout", "0")
+        .load()
+    )
+
+    row = df_bounds.first()
+    if row is None:
+        return None
+
+    min_id = row["min_id"]
+    max_id = row["max_id"]
+    if not isinstance(min_id, (int, float)) or not isinstance(max_id, (int, float)):
+        return None
+    if min_id == max_id:
+        return None
+
+    return int(min_id), int(max_id)
+
 def resolve_target_catalog(schema_name: str) -> str:
     if schema_name == "public":
         return CATALOG_PUBLIC
     if schema_name in ("financial", "financial_manager"):
         return CATALOG_FINANCIAL
-    return f"{ENV_LABEL}_vcn_{schema_name}"
+    return f"{schema_name}_vcn_{ENVIRONMENT}"
 
 
 def apply_column_comments(df, columns_desc):
@@ -66,6 +100,7 @@ def apply_column_comments(df, columns_desc):
 def create_table(table_conf):
     schema_name = table_conf["schema"]
     table_name = table_conf["name"]
+    pk_column = table_conf.get("pk")
     source_fqn = f"`{SOURCE_CATALOG}`.`{schema_name}`.`{table_name}`"
     target_catalog = resolve_target_catalog(schema_name)
     target_schema = PIPELINE_LAYER
@@ -89,21 +124,39 @@ def create_table(table_conf):
         # Isso evita o erro "canceling statement due to statement timeout"
         
         jdbc_url = get_jdbc_url(SOURCE_CATALOG)
-        
-        if jdbc_url and "anexo" in table_name:
-            # SÓ PARA A TABELA PROBLEMÁTICA 'ANEXO'
-            # Usamos JDBC direto com opções de timeout agressivas
-            print(f"Usando modo JDBC Otimizado para {table_name}")
-            
-            df = spark.read.format("jdbc") \
-                .option("url", jdbc_url) \
-                .option("dbtable", f"{schema_name}.{table_name}") \
-                .option("driver", "org.postgresql.Driver") \
-                .option("fetchsize", "1000") \
-                .option("queryTimeout", "0") \
-                .load() # O timeout 0 = infinito
+
+        if jdbc_url:
+            try:
+                timed_url = with_jdbc_timeouts(jdbc_url)
+                options = {
+                    "url": timed_url,
+                    "dbtable": f"{schema_name}.{table_name}",
+                    "driver": "org.postgresql.Driver",
+                    "fetchsize": "10000",
+                    "queryTimeout": "0",
+                }
+
+                bounds = None
+                if pk_column:
+                    bounds = get_partition_bounds(timed_url, schema_name, table_name, pk_column)
+
+                if bounds:
+                    lower_bound, upper_bound = bounds
+                    options.update(
+                        {
+                            "partitionColumn": pk_column,
+                            "lowerBound": str(lower_bound),
+                            "upperBound": str(upper_bound),
+                            "numPartitions": str(DEFAULT_NUM_PARTITIONS),
+                        }
+                    )
+
+                print(f"Usando JDBC para {table_name}")
+                df = spark.read.format("jdbc").options(**options).load()
+            except Exception as e:
+                print(f"Falha no JDBC para {table_name}. Erro: {str(e)}")
+                df = spark.read.table(source_fqn)
         else:
-            # Para as outras tabelas (ou se falhar ao pegar URL), usa Federação Padrão
             df = spark.read.table(source_fqn)
 
         # 2. BLINDAGEM DE STRING (Resolve o erro "value too long")

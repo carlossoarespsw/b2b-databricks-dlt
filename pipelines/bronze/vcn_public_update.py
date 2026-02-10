@@ -9,8 +9,8 @@ ENVIRONMENT = spark.conf.get("pipeline.env", "prod").lower()
 PIPELINE_LAYER = spark.conf.get("pipeline.layer", "bronze").lower()
 ENV_LABEL = "gold" if ENVIRONMENT == "prod" else ENVIRONMENT
 
-CATALOG_PUBLIC = spark.conf.get("catalog_public", f"{ENV_LABEL}_vcn_public")
-CATALOG_FINANCIAL = spark.conf.get("catalog_financial", f"{ENV_LABEL}_vcn_financial")
+CATALOG_PUBLIC = spark.conf.get("catalog_public", f"public_vcn_{ENVIRONMENT}")
+CATALOG_FINANCIAL = spark.conf.get("catalog_financial", f"financial_vcn_{ENVIRONMENT}")
 
 # Carregamento do YAML consolidado (com PK e Watermark)
 try:
