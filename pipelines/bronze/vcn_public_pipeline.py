@@ -2,8 +2,9 @@
 import dlt
 import yaml
 from datetime import date, datetime, timedelta
-from pyspark.sql.functions import col, current_timestamp, max as spark_max
+from pyspark.sql.functions import col, current_timestamp, max as spark_max, lit
 from pyspark.sql.types import StringType
+import os
 
 
 # COMMAND ----------
@@ -180,7 +181,94 @@ def apply_column_comments(df, columns_desc):
     )
 
 
-# COMMAND ----------
+def ingest_heavy_table(table_conf: dict) -> None:
+    schema_name = table_conf["schema"]
+    table_name = table_conf["name"]
+    partition_column = table_conf.get("partition_column") or table_conf.get("pk")
+    watermark_column = table_conf.get("watermark")
+    watermark_days = int(table_conf.get("watermark_days", 180))
+
+    target_catalog = resolve_target_catalog(schema_name)
+    target_table = f"{target_catalog}.raw.{table_name}"
+
+    print(f"\n{'='*80}")
+    print(f"Starting heavy ingestion: {table_name}")
+    print(f"Target RAW: {target_table}")
+    print(f"Watermark column: {watermark_column}")
+    print(f"Partition column: {partition_column}")
+    print(f"{'='*80}\n")
+
+    jdbc_url = get_jdbc_url(SOURCE_CATALOG)
+    if not jdbc_url:
+        raise RuntimeError(f"JDBC URL not found for source catalog {SOURCE_CATALOG}")
+
+    timed_url = with_jdbc_timeouts(jdbc_url)
+    last_wm = get_last_loaded_watermark(target_table, watermark_column)
+
+    if last_wm:
+        cutoff_ts = format_timestamp(last_wm)
+        watermark_filter = f"{watermark_column} > TIMESTAMP '{cutoff_ts}'"
+        print(f"Incremental load: watermark > {cutoff_ts}")
+    else:
+        cutoff_ts = (datetime.utcnow() - timedelta(days=watermark_days)).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        watermark_filter = f"{watermark_column} >= TIMESTAMP '{cutoff_ts}'"
+        print(f"Initial load: watermark >= {cutoff_ts} (last {watermark_days} days)")
+
+    print("Calculating partition bounds...")
+    bounds = get_filtered_partition_bounds(
+        timed_url,
+        schema_name,
+        table_name,
+        partition_column,
+        watermark_column,
+        cutoff_ts,
+    )
+
+    if not bounds:
+        print(f"No new data for {table_name}, skipping")
+        return
+
+    lower_bound, upper_bound = bounds
+    range_size = max(1, int(upper_bound) - int(lower_bound))
+    base_parts = max(4, int(spark.sparkContext.defaultParallelism // 2))
+    num_parts = min(base_parts, max(1, range_size // 1_000_000))
+
+    print(f"Partition bounds: [{lower_bound}, {upper_bound}]")
+    print(f"Range size: {upper_bound - lower_bound:,}")
+    print(f"Number of partitions: {num_parts}")
+
+    query = (
+        f"(SELECT * FROM {schema_name}.{table_name} "
+        f"WHERE {watermark_filter}) AS src"
+    )
+
+    df = (
+        spark.read.format("jdbc")
+        .option("url", timed_url)
+        .option("dbtable", query)
+        .option("driver", "org.postgresql.Driver")
+        .option("fetchsize", "10000")
+        .option("queryTimeout", "0")
+        .option("sessionInitStatement", "SET statement_timeout = 0")
+        .option("partitionColumn", partition_column)
+        .option("lowerBound", str(lower_bound))
+        .option("upperBound", str(upper_bound))
+        .option("numPartitions", str(num_parts))
+        .load()
+    )
+
+    df = df.withColumn("_ingestion_ts", current_timestamp())
+    df = df.withColumn(
+        "_ingestion_batch", lit(datetime.now().strftime("%Y%m%d_%H%M%S"))
+    )
+
+    print(f"Writing to Delta RAW: {target_table}")
+    df.write.format("delta").mode("append").option("mergeSchema", "true").saveAsTable(
+        target_table
+    )
+
 
 
 def create_table(table_conf):
@@ -191,12 +279,18 @@ def create_table(table_conf):
     is_heavy = bool(table_conf.get("heavy", False))
     watermark_days = int(table_conf.get("watermark_days", 180))
 
-    # Skip heavy tables - they are ingested by separate Spark job to RAW layer
+    allow_jdbc_fallback = not is_heavy
+    # Heavy tables: run local heavy ingestion function and read from RAW schema afterwards
     if is_heavy:
-        print(f"Skipping heavy table {table_name} - ingested by standalone job")
-        return
+        try:
+            ingest_heavy_table(table_conf)
+        except Exception as e:
+            print(f"Erro na ingestao heavy para {table_name}: {str(e)}")
 
-    source_fqn = f"`{SOURCE_CATALOG}`.`{schema_name}`.`{table_name}`"
+        # Source is the RAW table produced by heavy ingestion
+        source_fqn = f"`{resolve_target_catalog(schema_name)}`.`raw`.`{table_name}`"
+    else:
+        source_fqn = f"`{SOURCE_CATALOG}`.`{schema_name}`.`{table_name}`"
     target_catalog = resolve_target_catalog(schema_name)
     target_schema = PIPELINE_LAYER
     target_table = f"{target_catalog}.{target_schema}.{table_name}"
@@ -220,6 +314,10 @@ def create_table(table_conf):
         try:
             df = spark.read.table(source_fqn)
         except Exception as e:
+            if is_heavy and not allow_jdbc_fallback:
+                raise RuntimeError(
+                    f"Tabela RAW {source_fqn} nao encontrada. Rode o job heavy antes do DLT."
+                ) from e
             print(f"Falha no federado para {table_name}. Erro: {str(e)}")
             jdbc_url = get_jdbc_url(SOURCE_CATALOG)
 
