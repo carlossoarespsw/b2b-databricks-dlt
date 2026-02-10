@@ -50,7 +50,7 @@ Large PostgreSQL tables (15M+ rows, 2017-2026 data) are ingested via **standalon
 - `{env}_vcn_public.bronze.vcn_request`
 - `{env}_vcn_public.bronze.vcn_request_financial_trans`
 
-**Configuration**: `config/heavy_tables.yaml`
+**Configuration**: `config/tables_vcn_public.yaml` (same as DLT, filters `heavy: true`)
 
 ### 2. DLT Bronze Pipeline (Modified)
 **File**: `pipelines/bronze/vcn_public_pipeline.py`
@@ -63,34 +63,35 @@ Large PostgreSQL tables (15M+ rows, 2017-2026 data) are ingested via **standalon
 
 ## Configuration
 
-### heavy_tables.yaml
-```yaml
-source_catalog: "dev_vcn_b2b_federated"
+### tables_vcn_public.yaml (Single Source of Truth)
 
-heavy_tables:
+Both DLT pipeline and Heavy Ingestion Job read from the **same YAML file**.
+
+**Heavy tables** are marked with `heavy: true`:
+```yaml
+source_catalog: "vcn-federated"
+
+tables:
+  # ... other tables (processed by DLT) ...
+  
   - name: vcn_request
     schema: public
     pk: vcn_request_id
     watermark: last_modified
-    watermark_days: 180  # Initial load window
+    heavy: true              # ← Marks as heavy table
+    watermark_days: 180      # ← Optional: override default 180 days
     
   - name: vcn_request_financial_trans
     schema: public
     pk: vcn_request_financial_trans_id
     watermark: last_modified
-    watermark_days: 180
+    heavy: true              # ← Marks as heavy table
 ```
 
-### tables_vcn_public.yaml
-Keep `heavy: true` flag - DLT will skip these tables:
-```yaml
-tables:
-  - name: vcn_request
-    schema: public
-    pk: vcn_request_id
-    watermark: last_modified
-    heavy: true  # Skipped by DLT, ingested by standalone job
-```
+**Behavior**:
+- **DLT Pipeline**: Skips tables with `heavy: true` (line 212 in vcn_public_pipeline.py)
+- **Heavy Job**: Filters only tables with `heavy: true`
+- **Result**: No duplication, single source of configuration
 
 ## Orchestration
 
@@ -229,21 +230,31 @@ FROM dev_vcn_public.bronze.{light_table_name};
 
 ### 1. ~~Create RAW Schema~~ (Not needed - writes to Bronze)
 
-### 2. Run Initial Load
+### 2. Ensure Configuration
+Verify `tables_vcn_public.yaml` has heavy tables marked:
+```yaml
+- name: vcn_request
+  heavy: true  # Must be set
+  
+- name: vcn_request_financial_trans
+  heavy: true  # Must be set
+```
+
+### 3. Run Initial Load
 ```bash
 # Run heavy ingestion job manually first time
 # This will create Bronze tables and load initial 180 days
 ```
 
-### 3. Update DLT Pipeline
+### 4. Update DLT Pipeline
 - DLT will automatically skip heavy tables (already modified)
 - No additional notebooks needed - heavy tables already in Bronze
 
-### 4. Setup Orchestration
+### 5. Setup Orchestration
 - Create Databricks Workflow as described above
 - Schedule: Heavy job → DLT pipeline
 
-### 5. Monitor & Validate
+### 6. Monitor & Validate
 - Check job metrics and success rates
 - Compare row counts between RAW and Bronze
 - Validate data freshness

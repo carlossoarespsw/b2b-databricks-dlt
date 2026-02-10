@@ -25,19 +25,24 @@ CATALOG_PUBLIC = spark.conf.get("catalog_public", f"{ENVIRONMENT}_vcn_public")
 CATALOG_FINANCIAL = spark.conf.get("catalog_financial", f"{ENVIRONMENT}_vcn_financial")
 
 # COMMAND ----------
-# Load configuration
+# Load configuration (same YAML as DLT pipeline)
 try:
     import os
-    config_path = f"{os.getcwd()}/config/heavy_tables.yaml"
+    config_path = f"{os.getcwd()}/config/tables_vcn_public.yaml"
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
 except:
-    config_path = f"/Workspace/Repos/sp_b2b_ops_bot/b2b-databricks-dlt-{ENVIRONMENT}/config/heavy_tables.yaml"
+    config_path = f"/Workspace/Repos/sp_b2b_ops_bot/b2b-databricks-dlt-{ENVIRONMENT}/config/tables_vcn_public.yaml"
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
 
 SOURCE_CATALOG = config["source_catalog"]
-HEAVY_TABLES = config.get("heavy_tables", [])
+# Filter only tables marked as heavy: true
+HEAVY_TABLES = [t for t in config.get("tables", []) if t.get("heavy", False)]
+
+print(f"Found {len(HEAVY_TABLES)} heavy tables to ingest")
+for t in HEAVY_TABLES:
+    print(f"  - {t['name']} (schema: {t['schema']})")
 
 # COMMAND ----------
 def get_jdbc_url(catalog_name: str) -> str:
@@ -137,8 +142,10 @@ def ingest_heavy_table(table_conf: dict) -> dict:
     """
     schema_name = table_conf["schema"]
     table_name = table_conf["name"]
+    # Use pk field (consistent with DLT pipeline)
     partition_column = table_conf.get("pk")
     watermark_column = table_conf.get("watermark")
+    # watermark_days can be set per table in YAML, defaults to 180
     watermark_days = int(table_conf.get("watermark_days", WATERMARK_DAYS_DEFAULT))
     
     target_catalog = resolve_target_catalog(schema_name)
@@ -256,6 +263,8 @@ if __name__ == "__main__":
     print(f"\n{'#'*80}")
     print(f"# Heavy Tables Ingestion Job")
     print(f"# Environment: {ENVIRONMENT}")
+    print(f"# Source Catalog: {SOURCE_CATALOG}")
+    print(f"# Config: tables_vcn_public.yaml (filtering heavy: true)")
     print(f"# Tables to ingest: {len(HEAVY_TABLES)}")
     print(f"{'#'*80}\n")
     
