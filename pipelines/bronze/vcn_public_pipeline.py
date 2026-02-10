@@ -2,7 +2,7 @@
 import dlt
 import yaml
 from datetime import date, datetime, timedelta
-from pyspark.sql.functions import col, current_timestamp
+from pyspark.sql.functions import col, current_timestamp, max as spark_max
 from pyspark.sql.types import StringType
 
 
@@ -96,6 +96,67 @@ def get_partition_bounds(jdbc_url, schema_name, table_name, partition_column):
     return None
 
 
+def get_filtered_partition_bounds(
+    jdbc_url,
+    schema_name,
+    table_name,
+    partition_column,
+    watermark_column,
+    cutoff_ts,
+):
+    bounds_query = (
+        f"(SELECT MIN(\"{partition_column}\") AS min_v, "
+        f"MAX(\"{partition_column}\") AS max_v "
+        f"FROM {schema_name}.{table_name} "
+        f"WHERE {watermark_column} >= TIMESTAMP '{cutoff_ts}') AS bounds"
+    )
+
+    df_bounds = (
+        spark.read.format("jdbc")
+        .option("url", jdbc_url)
+        .option("dbtable", bounds_query)
+        .option("driver", "org.postgresql.Driver")
+        .option("queryTimeout", "0")
+        .load()
+    )
+
+    row = df_bounds.first()
+    if row is None:
+        return None
+
+    min_v = row["min_v"]
+    max_v = row["max_v"]
+    if min_v is None or max_v is None:
+        return None
+    if min_v == max_v:
+        return None
+
+    if isinstance(min_v, (int, float)) and isinstance(max_v, (int, float)):
+        return int(min_v), int(max_v)
+
+    if isinstance(min_v, (datetime, date)) and isinstance(max_v, (datetime, date)):
+        return min_v, max_v
+
+    return None
+
+
+def format_timestamp(value):
+    if value is None:
+        return None
+    if isinstance(value, (datetime, date)):
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+    return str(value)
+
+
+def get_last_loaded_watermark(target_table, watermark_column):
+    try:
+        df = spark.read.table(target_table)
+        row = df.select(spark_max(watermark_column).alias("wm")).collect()[0]
+        return row["wm"]
+    except Exception:
+        return None
+
+
 def resolve_target_catalog(schema_name: str) -> str:
     if schema_name == "public":
         return CATALOG_PUBLIC
@@ -128,6 +189,7 @@ def create_table(table_conf):
     partition_column = table_conf.get("partition_column") or table_conf.get("pk")
     watermark_column = table_conf.get("watermark")
     is_heavy = bool(table_conf.get("heavy", False))
+    watermark_days = int(table_conf.get("watermark_days", 180))
     source_fqn = f"`{SOURCE_CATALOG}`.`{schema_name}`.`{table_name}`"
     target_catalog = resolve_target_catalog(schema_name)
     target_schema = PIPELINE_LAYER
@@ -166,29 +228,69 @@ def create_table(table_conf):
                         "sessionInitStatement": "SET statement_timeout = 0",
                     }
 
-                    if is_heavy and watermark_column:
-                        print(f"Lendo tabela HEAVY {table_name} por janelas de tempo")
-                        start_date = datetime(2000, 1, 1)
-                        end_date = datetime.today()
-                        max_parallel = 12
-                        total_days = max(1, (end_date - start_date).days)
-                        step_days = max(30, total_days // max_parallel)
-                        windows = generate_time_windows(start_date, end_date, step_days)
-                        predicates = [
-                            (
-                                f"{watermark_column} >= TIMESTAMP '{start}' "
-                                f"AND {watermark_column} < TIMESTAMP '{end}'"
-                            )
-                            for start, end in windows
-                        ]
-
-                        df = (
-                            spark.read.format("jdbc")
-                            .options(**base_options)
-                            .option("dbtable", f"{schema_name}.{table_name}")
-                            .option("predicates", predicates)
-                            .load()
+                    if is_heavy and watermark_column and partition_column:
+                        print(
+                            f"Lendo tabela HEAVY {table_name} com filtro incremental e paralelismo por ID"
                         )
+                        last_wm = get_last_loaded_watermark(
+                            target_table, watermark_column
+                        )
+                        if last_wm:
+                            cutoff_ts = format_timestamp(last_wm)
+                            watermark_filter = (
+                                f"{watermark_column} > TIMESTAMP '{cutoff_ts}'"
+                            )
+                        else:
+                            cutoff_ts = (
+                                datetime.utcnow() - timedelta(days=watermark_days)
+                            ).strftime("%Y-%m-%d %H:%M:%S")
+                            watermark_filter = (
+                                f"{watermark_column} >= TIMESTAMP '{cutoff_ts}'"
+                            )
+                        bounds = get_filtered_partition_bounds(
+                            timed_url,
+                            schema_name,
+                            table_name,
+                            partition_column,
+                            watermark_column,
+                            cutoff_ts,
+                        )
+                        if not bounds:
+                            print(
+                                f"Sem dados recentes para {table_name}, retornando vazio"
+                            )
+                            empty_schema = (
+                                spark.read.format("jdbc")
+                                .options(**base_options)
+                                .option(
+                                    "dbtable",
+                                    f"(SELECT * FROM {schema_name}.{table_name} WHERE 1=0) AS empty",
+                                )
+                                .load()
+                                .schema
+                            )
+                            df = spark.createDataFrame([], empty_schema)
+                        else:
+                            lower_bound, upper_bound = bounds
+                            range_size = max(1, int(upper_bound) - int(lower_bound))
+                            base_parts = max(
+                                4, int(spark.sparkContext.defaultParallelism // 2)
+                            )
+                            num_parts = min(base_parts, max(1, range_size // 1_000_000))
+                            query = (
+                                f"(SELECT * FROM {schema_name}.{table_name} "
+                                f"WHERE {watermark_filter}) AS src"
+                            )
+                            df = (
+                                spark.read.format("jdbc")
+                                .options(**base_options)
+                                .option("dbtable", query)
+                                .option("partitionColumn", partition_column)
+                                .option("lowerBound", str(lower_bound))
+                                .option("upperBound", str(upper_bound))
+                                .option("numPartitions", str(num_parts))
+                                .load()
+                            )
                     else:
                         options = base_options.copy()
                         options["dbtable"] = f"{schema_name}.{table_name}"
