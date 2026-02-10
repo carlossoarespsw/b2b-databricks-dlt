@@ -302,16 +302,18 @@ tables:
     schema: "public"
     pk: "vcn_request_id"
     watermark: "last_modified"
+    heavy: true
 
   - name: "vcn_request_draft"
     schema: "public"
-    pk: "vcn_request_draft_id" # PK inferida com base no padrão do arquivo
+    pk: "vcn_request_draft_id"
     watermark: "last_modified"
 
   - name: "vcn_request_financial_trans"
     schema: "public"
     pk: "vcn_request_financial_trans_id"
     watermark: "last_modified"
+    heavy: true
 
   - name: "vcn_template"
     schema: "public"

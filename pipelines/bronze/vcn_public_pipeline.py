@@ -1,7 +1,7 @@
 # Databricks notebook source
 import dlt
 import yaml
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pyspark.sql.functions import col, current_timestamp
 from pyspark.sql.types import StringType
 
@@ -49,6 +49,16 @@ def with_jdbc_timeouts(jdbc_url):
     if "?" in jdbc_url:
         return f"{jdbc_url}&socketTimeout=0&connectTimeout=10"
     return f"{jdbc_url}?socketTimeout=0&connectTimeout=10"
+
+
+def generate_time_windows(start_date, end_date, step_days=30):
+    windows = []
+    current = start_date
+    while current < end_date:
+        next_date = current + timedelta(days=step_days)
+        windows.append((current, min(next_date, end_date)))
+        current = next_date
+    return windows
 
 
 def get_partition_bounds(jdbc_url, schema_name, table_name, partition_column):
@@ -116,6 +126,8 @@ def create_table(table_conf):
     schema_name = table_conf["schema"]
     table_name = table_conf["name"]
     partition_column = table_conf.get("partition_column") or table_conf.get("pk")
+    watermark_column = table_conf.get("watermark")
+    is_heavy = bool(table_conf.get("heavy", False))
     source_fqn = f"`{SOURCE_CATALOG}`.`{schema_name}`.`{table_name}`"
     target_catalog = resolve_target_catalog(schema_name)
     target_schema = PIPELINE_LAYER
@@ -146,45 +158,53 @@ def create_table(table_conf):
             if jdbc_url:
                 try:
                     timed_url = with_jdbc_timeouts(jdbc_url)
-                    dbtable = f"{schema_name}.{table_name}"
-
-                    options = {
+                    base_options = {
                         "url": timed_url,
-                        "dbtable": dbtable,
                         "driver": "org.postgresql.Driver",
                         "fetchsize": "10000",
                         "queryTimeout": "0",
                         "sessionInitStatement": "SET statement_timeout = 0",
                     }
 
-                    bounds = None
-                    if partition_column:
-                        bounds = get_partition_bounds(
-                            timed_url, schema_name, table_name, partition_column
-                        )
+                    if is_heavy and watermark_column:
+                        print(f"Lendo tabela HEAVY {table_name} por janelas de tempo")
+                        start_date = datetime(2000, 1, 1)
+                        end_date = datetime.today()
+                        max_parallel = 12
+                        total_days = max(1, (end_date - start_date).days)
+                        step_days = max(30, total_days // max_parallel)
+                        windows = generate_time_windows(start_date, end_date, step_days)
+                        predicates = [
+                            f"{watermark_column} >= '{start}' AND {watermark_column} < '{end}'"
+                            for start, end in windows
+                        ]
 
-                    if bounds:
-                        lower_bound, upper_bound = bounds
-                        num_partitions = min(DEFAULT_NUM_PARTITIONS, 4)
-                        if isinstance(lower_bound, (int, float)) and isinstance(
-                            upper_bound, (int, float)
-                        ):
-                            range_size = max(1, int(upper_bound) - int(lower_bound))
-                            num_partitions = min(
-                                DEFAULT_NUM_PARTITIONS, max(1, range_size // 5_000_000)
+                        df = (
+                            spark.read.format("jdbc")
+                            .options(**base_options)
+                            .option("dbtable", f"{schema_name}.{table_name}")
+                            .option("numPartitions", len(predicates))
+                            .option("partitionColumn", watermark_column)
+                            .option("lowerBound", "0")
+                            .option("upperBound", "1")
+                            .option("predicates", predicates)
+                            .load()
+                        )
+                    else:
+                        options = base_options.copy()
+                        options["dbtable"] = f"{schema_name}.{table_name}"
+                        if partition_column:
+                            options.update(
+                                {
+                                    "partitionColumn": partition_column,
+                                    "lowerBound": "0",
+                                    "upperBound": "1000000000",
+                                    "numPartitions": str(DEFAULT_NUM_PARTITIONS),
+                                }
                             )
 
-                        options.update(
-                            {
-                                "partitionColumn": partition_column,
-                                "lowerBound": str(lower_bound),
-                                "upperBound": str(upper_bound),
-                                "numPartitions": str(num_partitions),
-                            }
-                        )
-
-                    print(f"Usando JDBC para {table_name}")
-                    df = spark.read.format("jdbc").options(**options).load()
+                        print(f"Usando JDBC para {table_name}")
+                        df = spark.read.format("jdbc").options(**options).load()
                 except Exception as jdbc_error:
                     print(f"Falha no JDBC para {table_name}. Erro: {str(jdbc_error)}")
                     raise
