@@ -1,9 +1,31 @@
+# Databricks notebook source
+# MAGIC %md
+# MAGIC # VCN Public Bronze Pipeline (DLT)
+# MAGIC 
+# MAGIC Pipeline Delta Live Tables para consolidação da camada Bronze.
+# MAGIC 
+# MAGIC **Roteamento Inteligente:**
+# MAGIC - **Tabelas Heavy**: Leitura da RAW catalog (já ingeridas via JDBC)
+# MAGIC - **Tabelas Light**: Leitura direta da Federação (PostgreSQL)
+# MAGIC 
+# MAGIC **Processamento:**
+# MAGIC - Deduplicação via `apply_changes` (SCD Type 1)
+# MAGIC - Proteção contra erros de tipo (string shield)
+# MAGIC - Limite de 1000 registros em DEV para tabelas federadas
+
+# COMMAND ----------
+
 import dlt
 import yaml
 from pyspark.sql.functions import col, current_timestamp
 from pyspark.sql.types import StringType
 
-# --- SETUP ---
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 1. Setup e Configuração
+
+# COMMAND ----------
 ENVIRONMENT = spark.conf.get("pipeline.env", "dev").lower()
 # Nota: O path deve ser dinâmico ou fixo no repo
 CONFIG_PATH = f"/Workspace/Repos/sp_b2b_ops_bot/b2b-databricks-dlt-{ENVIRONMENT}/config/tables_vcn_b2b.yaml"
@@ -14,7 +36,17 @@ with open(CONFIG_PATH, "r") as f:
 SOURCE_CATALOG_FEDERATED = config["settings"]["source_catalog"]
 RAW_CATALOG = config["settings"]["raw_catalog_pattern"].format(env=ENVIRONMENT)
 
-# --- FUNÇÕES ---
+print(f"✅ Pipeline configurado:")
+print(f"   📍 Ambiente: {ENVIRONMENT}")
+print(f"   📂 Federação: {SOURCE_CATALOG_FEDERATED}")
+print(f"   📂 RAW: {RAW_CATALOG}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 2. Funções de Transformação
+
+# COMMAND ----------
 
 def apply_string_shield(df):
     """Proteção universal contra value too long"""
@@ -22,6 +54,13 @@ def apply_string_shield(df):
         if isinstance(field.dataType, StringType):
             df = df.withColumn(field.name, col(field.name).cast("string"))
     return df
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 3. Gerador Dinâmico de Tabelas DLT
+
+# COMMAND ----------
 
 def generate_dlt_table(table_conf):
     t_name = table_conf['name']
@@ -80,6 +119,12 @@ def generate_dlt_table(table_conf):
         stored_as_scd_type = 1 # Atualiza (não mantém histórico type 2 na bronze)
     )
 
-# --- LOOP PRINCIPAL ---
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 4. Execução - Geração de Tabelas
+
+# COMMAND ----------
+
 for t in config["tables"]:
     generate_dlt_table(t)

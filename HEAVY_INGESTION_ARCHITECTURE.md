@@ -31,7 +31,7 @@ Large PostgreSQL tables (15M+ rows, 2017-2026 data) are ingested via **standalon
 ## Components
 
 ### 1. Heavy Ingestion Job
-**File**: `pipelines/ingestion/heavy_tables_ingestion.py`
+**File**: `tasks/ingestion/heavy_tables_ingestion.py`
 
 **Purpose**: Ingest large tables from PostgreSQL directly to Delta Bronze layer
 
@@ -53,7 +53,7 @@ Large PostgreSQL tables (15M+ rows, 2017-2026 data) are ingested via **standalon
 **Configuration**: `config/tables_vcn_public.yaml` (same as DLT, filters `heavy: true`)
 
 ### 2. DLT Bronze Pipeline (Modified)
-**File**: `pipelines/bronze/vcn_public_pipeline.py`
+**File**: `tasks/bronze/vcn_public_pipeline.py`
 
 **Changes**:
 - Heavy tables (marked `heavy: true` in YAML) are **skipped**
@@ -103,7 +103,7 @@ Create a workflow with 2 independent tasks (can run in parallel):
 Workflow: VCN Public Ingestion
 ├─ Task 1: Heavy Ingestion (Independent)
 │  ├─ Type: Python (Notebook)
-│  ├─ Notebook: pipelines/ingestion/heavy_tables_ingestion.py
+│  ├─ Notebook: tasks/ingestion/heavy_tables_ingestion.py
 │  ├─ Cluster: Job Compute (4-8 workers)
 │  └─ Schedule: Daily 2 AM
 │
@@ -127,7 +127,7 @@ databricks workflows create --json-file workflow_config.json
 ```python
 # 1. Run heavy ingestion job
 dbutils.notebook.run(
-    "/Repos/sp_b2b_ops_bot/b2b-databricks-dlt/pipelines/ingestion/heavy_tables_ingestion",
+    "/Repos/sp_b2b_ops_bot/b2b-databricks-dlt/tasks/ingestion/heavy_tables_ingestion",
     timeout_seconds=3600,
     arguments={"job.env": "dev"}
 )

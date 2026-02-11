@@ -6,7 +6,7 @@ Este repositório contém os **jobs Delta Live Tables (DLT)** para a arquitetura
 
 ```
 b2b-databricks-dlt/
-├── pipelines/                    # Pipelines DLT organizadas por camada
+├── tasks/                        # Tasks DLT organizadas por camada
 │   ├── bronze/                   # Camada Bronze (dados brutos)
 │   │   ├── ingestion_pipeline.py
 │   │   └── README.md
@@ -25,7 +25,6 @@ b2b-databricks-dlt/
 │   ├── staging.yaml
 │   └── prod.yaml
 ├── tests/                        # Testes unitários
-│   └── test_pipelines.py
 ├── .env.example                  # Exemplo de variáveis de ambiente
 ├── requirements.txt              # Dependências Python
 └── README.md                     # Este arquivo

@@ -1,10 +1,29 @@
+# Databricks notebook source
+# MAGIC %md
+# MAGIC # Heavy Tables Ingestion
+# MAGIC 
+# MAGIC Notebook para ingestão de tabelas pesadas do PostgreSQL para o RAW Catalog usando JDBC otimizado.
+# MAGIC 
+# MAGIC **Fluxo:**
+# MAGIC 1. Leitura paralela via JDBC com particionamento
+# MAGIC 2. Carga incremental baseada em watermark
+# MAGIC 3. Escrita em formato Delta no RAW catalog
+
+# COMMAND ----------
+
 import yaml
 import sys
 from pyspark.sql import functions as F
 from pyspark.sql.types import StringType
 from pyspark.sql.utils import AnalysisException
 
-# --- SETUP ---
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 1. Setup e Configuração
+
+# COMMAND ----------
+
 # Recebe o ambiente via widget ou argumento
 dbutils.widgets.text("env", "dev")
 ENVIRONMENT = dbutils.widgets.get("env").lower()
@@ -17,7 +36,17 @@ with open(CONFIG_PATH, "r") as f:
 SOURCE_CATALOG = config["settings"]["source_catalog"]
 RAW_CATALOG = config["settings"]["raw_catalog_pattern"].format(env=ENVIRONMENT)
 
-# --- FUNÇÕES ---
+print(f"✅ Configuração carregada:")
+print(f"   📍 Ambiente: {ENVIRONMENT}")
+print(f"   📂 Source: {SOURCE_CATALOG}")
+print(f"   📂 Target: {RAW_CATALOG}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 2. Funções Auxiliares
+
+# COMMAND ----------
 
 def get_jdbc_params(source_catalog):
     """Recupera URL e credenciais da conexão federada do Unity Catalog"""
@@ -30,12 +59,21 @@ def get_jdbc_params(source_catalog):
         print(f"Erro ao obter URL JDBC: {e}")
         raise e
 
+# COMMAND ----------
+
 def get_max_watermark(target_table, watermark_col):
     """Descobre até onde já carregamos na RAW para fazer carga incremental"""
     try:
         return spark.read.table(target_table).agg(F.max(watermark_col)).collect()[0][0]
     except (AnalysisException, Exception):
         return None # Tabela não existe ou está vazia
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 3. Função Principal de Ingestão
+
+# COMMAND ----------
 
 def ingest_table(table_conf):
     table_name = table_conf["name"]
@@ -108,7 +146,13 @@ def ingest_table(table_conf):
     
     print(f"   ✅ Sucesso: {table_name} salvo em {target_table}")
 
-# --- EXECUÇÃO ---
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 4. Execução - Processamento de Tabelas Heavy
+
+# COMMAND ----------
+
 # Filtra apenas tabelas marcadas como heavy
 heavy_tables = [t for t in config["tables"] if t.get("heavy") is True]
 
