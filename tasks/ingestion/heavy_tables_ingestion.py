@@ -25,16 +25,16 @@ from pyspark.sql.utils import AnalysisException
 # COMMAND ----------
 
 # Recebe o ambiente via widget ou argumento
-dbutils.widgets.text("env", "dev")
-ENVIRONMENT = dbutils.widgets.get("env").lower()
+dbutils.widgets.text("environment", "dev")
+ENVIRONMENT = dbutils.widgets.get("environment").lower()
 CONFIG_PATH = f"/Workspace/Repos/sp_b2b_ops_bot/b2b-databricks-dlt-{ENVIRONMENT}/config/tables_vcn_public.yaml"
 
 # Carregar Config
 with open(CONFIG_PATH, "r") as f:
     config = yaml.safe_load(f)
 
-SOURCE_CATALOG = config["settings"]["source_catalog"]
-RAW_CATALOG = config["settings"]["raw_catalog_pattern"].format(env=ENVIRONMENT)
+SOURCE_CATALOG = config["source_catalog"]
+RAW_CATALOG = f"raw_vcn_{ENVIRONMENT}"
 
 print(f"✅ Configuração carregada:")
 print(f"   📍 Ambiente: {ENVIRONMENT}")

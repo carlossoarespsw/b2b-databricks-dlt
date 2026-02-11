@@ -33,8 +33,8 @@ CONFIG_PATH = f"/Workspace/Repos/sp_b2b_ops_bot/b2b-databricks-dlt-{ENVIRONMENT}
 with open(CONFIG_PATH, "r") as f:
     config = yaml.safe_load(f)
 
-SOURCE_CATALOG_FEDERATED = config["settings"]["source_catalog"]
-RAW_CATALOG = config["settings"]["raw_catalog_pattern"].format(env=ENVIRONMENT)
+SOURCE_CATALOG_FEDERATED = config["source_catalog"]
+RAW_CATALOG = f"raw_vcn_{ENVIRONMENT}"
 
 print(f"✅ Pipeline configurado:")
 print(f"   📍 Ambiente: {ENVIRONMENT}")
