@@ -7,8 +7,27 @@ from pyspark.sql import functions as F
 # CONFIG
 # =============================
 
-ENVIRONMENT = spark.conf.get("pipeline.env", "dev").lower()
-CATALOG_PUBLIC = spark.conf.get("catalog_public", f"{ENVIRONMENT}_vcn_public")
+# Setup widgets for job parameters
+try:
+    dbutils.widgets.text("environment", "dev", "Environment")
+    dbutils.widgets.text("catalog_public", "", "Public Catalog Name")
+    
+    ENVIRONMENT = dbutils.widgets.get("environment").lower()
+    CATALOG_PUBLIC = dbutils.widgets.get("catalog_public")
+    
+    # If catalog not provided via widget, construct default
+    if not CATALOG_PUBLIC:
+        CATALOG_PUBLIC = f"public_vcn_{ENVIRONMENT}"
+    
+    print(f"Running as Job - Environment: {ENVIRONMENT}, Catalog: {CATALOG_PUBLIC}")
+    
+except Exception as e:
+    print(f"Running as Pipeline - using pipeline.env configuration")
+    # Fallback to pipeline config if widgets not available (DLT pipeline context)
+    ENVIRONMENT = spark.conf.get("pipeline.env", "dev").lower()
+    CATALOG_PUBLIC = spark.conf.get("catalog_public", f"public_vcn_{ENVIRONMENT}")
+    print(f"Pipeline mode - Environment: {ENVIRONMENT}, Catalog: {CATALOG_PUBLIC}")
+
 SOURCE_CATALOG = "vcn-federated"  # federated catalog name
 RAW_SCHEMA = "raw"
 
