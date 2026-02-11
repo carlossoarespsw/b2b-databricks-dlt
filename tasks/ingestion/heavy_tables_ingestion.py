@@ -27,7 +27,7 @@ from pyspark.sql.utils import AnalysisException
 # Recebe o ambiente via widget ou argumento
 dbutils.widgets.text("env", "dev")
 ENVIRONMENT = dbutils.widgets.get("env").lower()
-CONFIG_PATH = f"/Workspace/Repos/sp_b2b_ops_bot/b2b-databricks-dlt-{ENVIRONMENT}/config/tables_vcn_b2b.yaml"
+CONFIG_PATH = f"/Workspace/Repos/sp_b2b_ops_bot/b2b-databricks-dlt-{ENVIRONMENT}/config/tables_vcn_public.yaml"
 
 # Carregar Config
 with open(CONFIG_PATH, "r") as f:

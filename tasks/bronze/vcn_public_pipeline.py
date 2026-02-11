@@ -28,7 +28,7 @@ from pyspark.sql.types import StringType
 # COMMAND ----------
 ENVIRONMENT = spark.conf.get("pipeline.env", "dev").lower()
 # Nota: O path deve ser dinâmico ou fixo no repo
-CONFIG_PATH = f"/Workspace/Repos/sp_b2b_ops_bot/b2b-databricks-dlt-{ENVIRONMENT}/config/tables_vcn_b2b.yaml"
+CONFIG_PATH = f"/Workspace/Repos/sp_b2b_ops_bot/b2b-databricks-dlt-{ENVIRONMENT}/config/tables_vcn_public.yaml"
 
 with open(CONFIG_PATH, "r") as f:
     config = yaml.safe_load(f)
