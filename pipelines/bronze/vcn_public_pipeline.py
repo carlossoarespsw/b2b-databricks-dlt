@@ -232,7 +232,8 @@ def ingest_heavy_table(table_conf: dict) -> None:
 
     lower_bound, upper_bound = bounds
     range_size = max(1, int(upper_bound) - int(lower_bound))
-    base_parts = max(4, int(spark.sparkContext.defaultParallelism // 2))
+    # Use fixed parallelism to avoid sparkContext access (not supported in serverless)
+    base_parts = 8
     num_parts = min(base_parts, max(1, range_size // 1_000_000))
 
     print(f"Partition bounds: [{lower_bound}, {upper_bound}]")

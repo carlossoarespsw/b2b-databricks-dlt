@@ -32,7 +32,8 @@ SOURCE_CATALOG = "vcn-federated"  # federated catalog name
 RAW_SCHEMA = "raw"
 
 JDBC_FETCHSIZE = 10000
-DEFAULT_PARALLELISM = max(4, spark.sparkContext.defaultParallelism)
+# Use fixed parallelism to avoid sparkContext access (not supported in serverless)
+DEFAULT_PARALLELISM = 8
 
 # =============================
 # LOAD YAML
