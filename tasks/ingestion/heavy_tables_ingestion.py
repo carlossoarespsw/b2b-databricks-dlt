@@ -14,8 +14,6 @@ from pyspark.sql import functions as F
 from pyspark.sql.types import StringType
 from pyspark.sql.utils import AnalysisException
 
-# Silencia logs técnicos do Spark para manter a interface limpa
-spark.sparkContext.setLogLevel("ERROR")
 
 class TableProgressBar:
     """Componente visual para monitoramento do progresso por data."""
