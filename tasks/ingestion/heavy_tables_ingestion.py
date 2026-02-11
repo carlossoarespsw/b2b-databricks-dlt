@@ -59,8 +59,10 @@ class TableProgressBar:
 
 # COMMAND ----------
 # II. CONFIGURAÇÃO DE AMBIENTE E PARÂMETROS
+import os
 dbutils.widgets.text("environment", "dev", "Ambiente (dev/staging/prod)")
-ENVIRONMENT = dbutils.widgets.get("environment").lower()
+# Prioriza valor passado por job/task (base_parameters), ignora fallback se possível
+ENVIRONMENT = os.environ.get("environment") or dbutils.widgets.get("environment").lower()
 
 # Definição dos catálogos de Destino
 RAW_CATALOG = "landingzone"
