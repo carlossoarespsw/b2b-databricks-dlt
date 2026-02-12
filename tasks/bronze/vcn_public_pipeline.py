@@ -77,16 +77,19 @@ def generate_dlt_table(table_conf):
         source_fqn = f"`{SOURCE_CATALOG_FEDERATED}`.`{t_schema}`.`{t_name}`"
         desc = f"Origem: JDBC Catalog Federado ({source_fqn})"
 
-    @dlt.view(name=f"vw_{t_name}_clean", comment=desc)
-    def get_source():
+    @dlt.table(name=t_name, comment=f"Tabela Bronze consolidada. {desc}")
+    def bronze_table():
+        from pyspark.sql import Window
+        from pyspark.sql.functions import row_number, month, year
+        
         try:
+            # Read directly from source
             if ENVIRONMENT == "dev":
                 df = spark.read.table(source_fqn)
                 df = apply_string_shield(df)
                 df = df.limit(100000)
-                return df.withColumn("_processed_at", current_timestamp())
+                df = df.withColumn("_processed_at", current_timestamp())
             else:
-                from pyspark.sql.functions import month, year
                 if is_heavy:
                     months = [row[0] for row in spark.read.table(source_fqn).select(month(col(t_watermark))).distinct().collect()]
                     df_all = None
@@ -98,9 +101,7 @@ def generate_dlt_table(table_conf):
                             df_all = df_month
                         else:
                             df_all = df_all.unionByName(df_month)
-                    if df_all is None:
-                        df_all = spark.read.table(source_fqn).limit(0).withColumn("_processed_at", current_timestamp())
-                    return df_all
+                    df = df_all
                 else:
                     years = [row[0] for row in spark.read.table(source_fqn).select(year(col(t_watermark))).distinct().collect()]
                     df_all = None
@@ -112,27 +113,19 @@ def generate_dlt_table(table_conf):
                             df_all = df_year
                         else:
                             df_all = df_all.unionByName(df_year)
-                    if df_all is None:
-                        df_all = spark.read.table(source_fqn).limit(0).withColumn("_processed_at", current_timestamp())
-                    return df_all
+                    df = df_all
+            
+            # Deduplicate: keep only the latest record per primary key
+            window_spec = Window.partitionBy(t_pk).orderBy(col(t_watermark).desc())
+            df_dedup = df.withColumn("_row_num", row_number().over(window_spec)) \
+                         .filter(col("_row_num") == 1) \
+                         .drop("_row_num")
+            
+            return df_dedup
         except Exception as e:
             print(f"Erro final lendo {source_fqn}: {e}")
             raise e
 
-    # Criar a streaming table (target do CDC)
-    dlt.create_streaming_table(
-        name=t_name,
-        comment=f"Tabela Bronze consolidada. {desc}"
-    )
-
-    # Definir o fluxo CDC
-    dlt.apply_changes(
-        target=t_name,
-        source=f"vw_{t_name}_clean",
-        keys=[t_pk],
-        sequence_by=col(t_watermark),
-        stored_as_scd_type=1
-    )
 # COMMAND ----------
 
 # MAGIC %md
