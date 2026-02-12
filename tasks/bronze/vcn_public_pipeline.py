@@ -98,6 +98,8 @@ def generate_dlt_table(table_conf):
                             df_all = df_month
                         else:
                             df_all = df_all.unionByName(df_month)
+                    if df_all is None:
+                        df_all = spark.read.table(source_fqn).limit(0).withColumn("_processed_at", current_timestamp())
                     return df_all
                 else:
                     years = [row[0] for row in spark.read.table(source_fqn).select(year(col(t_watermark))).distinct().collect()]
@@ -110,22 +112,27 @@ def generate_dlt_table(table_conf):
                             df_all = df_year
                         else:
                             df_all = df_all.unionByName(df_year)
+                    if df_all is None:
+                        df_all = spark.read.table(source_fqn).limit(0).withColumn("_processed_at", current_timestamp())
                     return df_all
         except Exception as e:
             print(f"Erro final lendo {source_fqn}: {e}")
             raise e
 
-    dlt.apply_changes(
-        target = t_name,
-        source = f"vw_{t_name}_clean",
-        keys = [t_pk],
-        sequence_by = col(t_watermark), # Garante que o registro mais novo vença
-        stored_as_scd_type = 1 # Atualiza (não mantém histórico type 2 na bronze)
+    # Criar a streaming table (target do CDC)
+    dlt.create_streaming_table(
+        name=t_name,
+        comment=f"Tabela Bronze consolidada. {desc}"
     )
 
-    @dlt.table(name=t_name, comment=f"Tabela Bronze consolidada. {desc}")
-    def bronze_table():
-        return spark.read.table(t_name)
+    # Definir o fluxo CDC
+    dlt.apply_changes(
+        target=t_name,
+        source=f"vw_{t_name}_clean",
+        keys=[t_pk],
+        sequence_by=col(t_watermark),
+        stored_as_scd_type=1
+    )
 # COMMAND ----------
 
 # MAGIC %md
