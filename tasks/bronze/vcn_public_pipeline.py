@@ -122,6 +122,10 @@ def generate_dlt_table(table_conf):
         sequence_by = col(t_watermark), # Garante que o registro mais novo vença
         stored_as_scd_type = 1 # Atualiza (não mantém histórico type 2 na bronze)
     )
+
+    @dlt.table(name=t_name, comment=f"Tabela Bronze consolidada. {desc}")
+    def bronze_table():
+        return spark.read.table(t_name)
 # COMMAND ----------
 
 # MAGIC %md
