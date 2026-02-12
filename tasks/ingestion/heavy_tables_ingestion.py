@@ -57,16 +57,11 @@ class TableProgressBar:
 
 # COMMAND ----------
 # II. CONFIGURAÇÃO DE AMBIENTE E PARÂMETROS
-import os
-dbutils.widgets.text("environment", "dev", "Ambiente (dev/staging/prod)")
-# Prioriza valor passado por job/task (base_parameters), ignora fallback se possível
-ENVIRONMENT = os.environ.get("environment") or dbutils.widgets.get("environment").lower()
 
-# Definição dos catálogos de Destino
+ENVIRONMENT = os.environ.get("environment")
 RAW_CATALOG = "landingzone"
 RAW_SCHEMA = "raw"
 
-# Carregamento do YAML de configuração
 CONFIG_PATH = f"/Workspace/Repos/sp_b2b_ops_bot/b2b-databricks-dlt-{ENVIRONMENT}/config/tables_vcn_public.yaml"
 
 try:
@@ -96,12 +91,10 @@ def ingest_batch(table_conf, start_date, end_date):
     target_table = f"{RAW_CATALOG}.{RAW_SCHEMA}.{t_name}"
     source_fqn = f"`{SOURCE_CATALOG}`.`{t_schema}`.`{t_name}`"
     
-    # Leitura com Predicate Pushdown
     df = spark.read.table(source_fqn).filter(
         (F.col(t_wm) >= start_date) & (F.col(t_wm) < end_date)
     )
     
-    # Shield contra nvarchar(64) - Blindagem de strings
     for field in df.schema.fields:
         if isinstance(field.dataType, StringType):
             df = df.withColumn(field.name, F.col(field.name).cast("string"))
@@ -117,56 +110,109 @@ def ingest_batch(table_conf, start_date, end_date):
     return count
 
 # COMMAND ----------
-# IV. EXECUÇÃO DO LOOP DE MIGRAÇÃO
+# IV. EXECUÇÃO DO LOOP DE MIGRAÇÃO COM CHECKPOINT INTELIGENTE
+from datetime import timedelta
+
+try:
+    spark.sql(f"CREATE SCHEMA IF NOT EXISTS {RAW_CATALOG}.{RAW_SCHEMA}")
+    print(f"✅ Schema {RAW_CATALOG}.{RAW_SCHEMA} verificado/criado\n")
+except Exception as e:
+    print(f"⚠️ Aviso ao criar schema: {e}\n")
+
 heavy_tables = [t for t in config['tables'] if t.get('heavy', False)]
 
 if not heavy_tables:
     print("Nenhuma tabela com flag 'heavy: true' encontrada.")
 else:
+    print(f"🚀 Iniciando migração de {len(heavy_tables)} tabelas com checkpoint automático\n")
+    
     for table_conf in heavy_tables:
         t_name = table_conf["name"]
         t_wm = table_conf["watermark"]
         target_table = f"{RAW_CATALOG}.{RAW_SCHEMA}.{t_name}"
         source_fqn = f"`{SOURCE_CATALOG}`.`{table_conf['schema']}`.`{t_name}`"
         
-        # Lógica de Checkpoint (Retomada Automática)
+        print(f"\n{'='*80}")
+        print(f"📂 {t_name}")
+        print(f"{'='*80}")
+        
         last_date = get_last_ingested_date(target_table, t_wm)
         
         if last_date:
-            start_date = last_date
-            print(f"🔄 Checkpoint encontrado para {t_name}. Retomando de {start_date}")
+            if isinstance(last_date, str):
+                start_date = datetime.strptime(last_date[:10], "%Y-%m-%d") + timedelta(days=1)
+            else:
+                start_date = last_date + timedelta(days=1)
+            print(f"🔄 Checkpoint encontrado: {last_date}")
+            print(f"   Continuando de: {start_date.date()}")
         else:
             min_date_val = spark.read.table(source_fqn).agg(F.min(t_wm)).collect()[0][0]
             if not min_date_val:
-                print(f"⚠️ {t_name} está vazia na origem. Pulando.")
+                print(f"⚠️ Tabela vazia na origem. Pulando.")
                 continue
             start_date = min_date_val
-            print(f"🆕 Iniciando carga histórica total para {t_name}")
-
-        # Normalização de datas
-        if isinstance(start_date, str): 
+            print(f"🆕 Iniciando carga histórica completa")
+            print(f"   Data inicial na origem: {start_date}")
+        
+        if isinstance(start_date, str):
             start_date = datetime.strptime(start_date[:10], "%Y-%m-%d")
         start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_date = datetime.now()
+        end_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         
-        # Inicializa UI de progresso
+        current_month_start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        
         p_bar = TableProgressBar(t_name, start_date, end_date)
         current_date = start_date
         total_rows = 0
+        batch_count = 0
         
-        # Loop Mensal
-        while current_date < end_date:
-            next_date = current_date + relativedelta(months=1)
-            if next_date > end_date: next_date = end_date
+        # 2. CARGA MÊS A MÊS até o mês atual
+        print(f"\n📆 Fase 1: Carga MENSAL (até {current_month_start.date()})")
+        while current_date < current_month_start:
+            batch_count += 1
+            next_date = (current_date + relativedelta(months=1)).replace(day=1)
+            
+            if next_date > current_month_start:
+                next_date = current_month_start
             
             try:
+                print(f"   Batch {batch_count}: {current_date.strftime('%Y-%m')} ({current_date.date()} até {next_date.date()})")
                 rows = ingest_batch(table_conf, current_date, next_date)
                 total_rows += rows
                 p_bar.update(next_date, total_rows)
+                print(f"      ✅ {rows:,} registros")
             except Exception as e:
-                print(f"❌ Erro crítico no batch {current_date.date()} da tabela {t_name}: {e}")
+                print(f"      ❌ Erro: {e}")
+                print(f"      📌 Checkpoint salvo em: {current_date.date()}")
                 break
-                
+            
             current_date = next_date
-
-print(f"\n✅ PROCESSO FINALIZADO PARA {len(heavy_tables)} TABELAS.")
+        
+        # 3. CARGA DIA A DIA para o mês atual
+        if current_date >= current_month_start and current_date < end_date:
+            print(f"\n📅 Fase 2: Carga DIÁRIA (mês atual: {current_month_start.strftime('%Y-%m')})")
+            
+            while current_date < end_date:
+                batch_count += 1
+                next_date = current_date + timedelta(days=1)
+                
+                if next_date > end_date:
+                    next_date = end_date
+                
+                try:
+                    print(f"   Batch {batch_count}: {current_date.strftime('%Y-%m-%d')}")
+                    rows = ingest_batch(table_conf, current_date, next_date)
+                    total_rows += rows
+                    p_bar.update(next_date, total_rows)
+                    print(f"      ✅ {rows:,} registros")
+                except Exception as e:
+                    print(f"      ❌ Erro: {e}")
+                    print(f"      📌 Checkpoint salvo em: {current_date.date()}")
+                    break
+                
+                current_date = next_date
+        
+        print(f"\n📊 Resumo {t_name}:")
+        print(f"   Total de registros: {total_rows:,}")
+        print(f"   Total de batches: {batch_count}")
+        print(f"   Último checkpoint: {current_date.date()}")
