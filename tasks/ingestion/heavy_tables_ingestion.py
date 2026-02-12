@@ -58,7 +58,7 @@ class TableProgressBar:
 # COMMAND ----------
 # II. CONFIGURAÇÃO DE AMBIENTE E PARÂMETROS
 
-ENVIRONMENT = os.environ.get("environment")
+ENVIRONMENT = dbutils.widgets.get("environment").lower()
 RAW_CATALOG = "landingzone"
 RAW_SCHEMA = "raw"
 
