@@ -34,8 +34,8 @@ with open(CONFIG_PATH, "r") as f:
     config = yaml.safe_load(f)
 
 SOURCE_CATALOG_FEDERATED = config["source_catalog"]
-RAW_CATALOG = "landingzone"  # Catálogo correto onde as tabelas heavy foram ingeridas
-RAW_SCHEMA = "raw"  # Schema dentro do catálogo landingzone
+RAW_CATALOG = "landingzone"
+RAW_SCHEMA = "raw"
 
 print(f"✅ Pipeline configurado:")
 print(f"   📍 Ambiente: {ENVIRONMENT}")
@@ -69,13 +69,12 @@ def generate_dlt_table(table_conf):
     t_pk = table_conf['pk']
     t_watermark = table_conf.get('watermark', 'last_modified')
     is_heavy = table_conf.get('heavy', False)
-
     if is_heavy:
-        source_fqn = f"`{RAW_CATALOG}`.`{t_schema}`.`{t_name}`"
+        source_fqn = f"`{RAW_CATALOG}`.`{RAW_SCHEMA}`.`{t_name}""
         desc = f"Origem: RAW ({source_fqn})"
     else:
         source_fqn = f"`{SOURCE_CATALOG_FEDERATED}`.`{t_schema}`.`{t_name}`"
-        desc = f"Origem: FEDERADA ({source_fqn})"
+        desc = f"Origem: JDBC Catalog Federado ({source_fqn})"
 
     @dlt.view(name=f"vw_{t_name}_clean", comment=desc)
     def get_source():
@@ -83,9 +82,15 @@ def generate_dlt_table(table_conf):
             if is_heavy:
                 df = spark.readStream.table(source_fqn)
             else:
-                df = spark.read.table(source_fqn)
+                jdbc_url = f"jdbc:databricks:///?catalog={SOURCE_CATALOG_FEDERATED}&schema={t_schema}"
+                df = spark.read.format("jdbc") \
+                    .option("url", jdbc_url) \
+                    .option("dbtable", t_name) \
+                    .option("queryTimeout", "0") \
+                    .option("sessionInitStatement", "SET statement_timeout = 0") \
+                    .load()
         except Exception as e:
-            print(f"Erro lendo {source_fqn}: {e}")
+            print(f"Erro final lendo {source_fqn}: {e}")
             raise e
         
         df = apply_string_shield(df)
@@ -94,7 +99,7 @@ def generate_dlt_table(table_conf):
         
         return df.withColumn("_processed_at", current_timestamp())
 
-    target_table_name = t_name # O DLT usa o Target Schema definido no Pipeline Settings
+    target_table_name = t_name
     
     dlt.create_streaming_table(
         name=target_table_name,
@@ -108,7 +113,6 @@ def generate_dlt_table(table_conf):
         sequence_by = col(t_watermark), # Garante que o registro mais novo vença
         stored_as_scd_type = 1 # Atualiza (não mantém histórico type 2 na bronze)
     )
-
 # COMMAND ----------
 
 # MAGIC %md
