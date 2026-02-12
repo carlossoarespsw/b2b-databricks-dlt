@@ -115,18 +115,13 @@ def generate_dlt_table(table_conf):
             print(f"Erro final lendo {source_fqn}: {e}")
             raise e
 
-    target_table_name = t_name
-
-    @dlt.table(name=target_table_name, comment=f"Tabela Bronze consolidada. {desc}")
-    def bronze_table():
-        dlt.apply_changes(
-            target = target_table_name,
-            source = f"vw_{t_name}_clean",
-            keys = [t_pk],
-            sequence_by = col(t_watermark), # Garante que o registro mais novo vença
-            stored_as_scd_type = 1 # Atualiza (não mantém histórico type 2 na bronze)
-        )
-        return spark.read.table(target_table_name)
+    dlt.apply_changes(
+        target = t_name,
+        source = f"vw_{t_name}_clean",
+        keys = [t_pk],
+        sequence_by = col(t_watermark), # Garante que o registro mais novo vença
+        stored_as_scd_type = 1 # Atualiza (não mantém histórico type 2 na bronze)
+    )
 # COMMAND ----------
 
 # MAGIC %md
