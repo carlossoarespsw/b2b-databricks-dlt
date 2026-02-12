@@ -82,13 +82,7 @@ def generate_dlt_table(table_conf):
             if is_heavy:
                 df = spark.readStream.table(source_fqn)
             else:
-                jdbc_url = f"jdbc:databricks:///?catalog={SOURCE_CATALOG_FEDERATED}&schema={t_schema}"
-                df = spark.read.format("jdbc") \
-                    .option("url", jdbc_url) \
-                    .option("dbtable", t_name) \
-                    .option("queryTimeout", "0") \
-                    .option("sessionInitStatement", "SET statement_timeout = 0") \
-                    .load()
+                df = spark.read.table(source_fqn)
         except Exception as e:
             print(f"Erro final lendo {source_fqn}: {e}")
             raise e
