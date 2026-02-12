@@ -70,7 +70,7 @@ def generate_dlt_table(table_conf):
     t_watermark = table_conf.get('watermark', 'last_modified')
     is_heavy = table_conf.get('heavy', False)
     if is_heavy:
-        source_fqn = f"`{RAW_CATALOG}`.`{RAW_SCHEMA}`.`{t_name}""
+        source_fqn = f"`{RAW_CATALOG}`.`{RAW_SCHEMA}`.`{t_name}`"
         desc = f"Origem: RAW ({source_fqn})"
     else:
         source_fqn = f"`{SOURCE_CATALOG_FEDERATED}`.`{t_schema}`.`{t_name}`"
