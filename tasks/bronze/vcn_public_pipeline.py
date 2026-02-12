@@ -20,6 +20,7 @@ import yaml
 import os
 from pyspark.sql.functions import col, current_timestamp
 from pyspark.sql.types import StringType
+from pyspark.sql.functions import year
 
 # COMMAND ----------
 
@@ -79,19 +80,42 @@ def generate_dlt_table(table_conf):
     @dlt.view(name=f"vw_{t_name}_clean", comment=desc)
     def get_source():
         try:
-            if is_heavy:
-                df = spark.readStream.table(source_fqn)
-            else:
+            if ENVIRONMENT == "dev":
                 df = spark.read.table(source_fqn)
+                df = apply_string_shield(df)
+                df = df.limit(100000)
+                return df.withColumn("_processed_at", current_timestamp())
+            else:
+                from pyspark.sql.functions import month, year
+                if is_heavy:
+                    # Para heavy, particiona por mês do watermark
+                    months = [row[0] for row in spark.read.table(source_fqn).select(month(col(t_watermark))).distinct().collect()]
+                    df_all = None
+                    for m in months:
+                        df_month = spark.read.table(source_fqn).filter(month(col(t_watermark)) == m)
+                        df_month = apply_string_shield(df_month)
+                        df_month = df_month.withColumn("_processed_at", current_timestamp())
+                        if df_all is None:
+                            df_all = df_month
+                        else:
+                            df_all = df_all.unionByName(df_month)
+                    return df_all
+                else:
+                    # Para não-heavy, particiona por ano do watermark
+                    years = [row[0] for row in spark.read.table(source_fqn).select(year(col(t_watermark))).distinct().collect()]
+                    df_all = None
+                    for y in years:
+                        df_year = spark.read.table(source_fqn).filter(year(col(t_watermark)) == y)
+                        df_year = apply_string_shield(df_year)
+                        df_year = df_year.withColumn("_processed_at", current_timestamp())
+                        if df_all is None:
+                            df_all = df_year
+                        else:
+                            df_all = df_all.unionByName(df_year)
+                    return df_all
         except Exception as e:
             print(f"Erro final lendo {source_fqn}: {e}")
             raise e
-        
-        df = apply_string_shield(df)
-        if ENVIRONMENT == "dev":
-            df = df.limit(100000)
-        
-        return df.withColumn("_processed_at", current_timestamp())
 
     target_table_name = t_name
     
