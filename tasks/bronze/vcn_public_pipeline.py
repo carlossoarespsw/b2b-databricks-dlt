@@ -17,6 +17,7 @@
 
 import dlt
 import yaml
+import os
 from pyspark.sql.functions import col, current_timestamp
 from pyspark.sql.types import StringType
 
@@ -27,7 +28,6 @@ from pyspark.sql.types import StringType
 
 # COMMAND ----------
 ENVIRONMENT = spark.conf.get("pipeline.env", "dev").lower()
-# Nota: O path deve ser dinâmico ou fixo no repo
 CONFIG_PATH = f"/Workspace/Repos/sp_b2b_ops_bot/b2b-databricks-dlt-{ENVIRONMENT}/config/tables_vcn_public.yaml"
 
 with open(CONFIG_PATH, "r") as f:
@@ -69,41 +69,30 @@ def generate_dlt_table(table_conf):
     t_watermark = table_conf.get('watermark', 'last_modified')
     is_heavy = table_conf.get('heavy', False)
 
-    # LÓGICA DE ROTEAMENTO DE ORIGEM
     if is_heavy:
-        # Se for pesado, a origem é a tabela Delta RAW (carregada pelo Job 1)
         source_fqn = f"`{RAW_CATALOG}`.`{t_schema}`.`{t_name}`"
         desc = f"Origem: RAW ({source_fqn})"
     else:
-        # Se for leve, vai direto na Federação
         source_fqn = f"`{SOURCE_CATALOG_FEDERATED}`.`{t_schema}`.`{t_name}`"
         desc = f"Origem: FEDERADA ({source_fqn})"
 
-    # 1. VIEW TEMPORÁRIA (Leitura + Tratamento)
     @dlt.view(name=f"vw_{t_name}_clean", comment=desc)
     def get_source():
-        # Leitura
         try:
             if is_heavy:
-                # Lendo da RAW (Stream para processar apenas o novo que chegou na raw)
                 df = spark.readStream.table(source_fqn)
             else:
-                # Lendo da Federação (Batch)
                 df = spark.read.table(source_fqn)
         except Exception as e:
             print(f"Erro lendo {source_fqn}: {e}")
             raise e
         
-        # Tratamento
         df = apply_string_shield(df)
+        if ENVIRONMENT == "dev":
+            df = df.limit(100000)
         
-        # Limite em DEV para tabelas federadas (Heavy já vem filtrado da raw, não precisa)
-        if ENVIRONMENT == "dev" and not is_heavy:
-            df = df.limit(1000)
-            
         return df.withColumn("_processed_at", current_timestamp())
 
-    # 2. TABELA FINAL (Upsert / Deduplicação)
     target_table_name = t_name # O DLT usa o Target Schema definido no Pipeline Settings
     
     dlt.create_streaming_table(
