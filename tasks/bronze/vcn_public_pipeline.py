@@ -88,7 +88,6 @@ def generate_dlt_table(table_conf):
             else:
                 from pyspark.sql.functions import month, year
                 if is_heavy:
-                    # Para heavy, particiona por mês do watermark
                     months = [row[0] for row in spark.read.table(source_fqn).select(month(col(t_watermark))).distinct().collect()]
                     df_all = None
                     for m in months:
@@ -101,7 +100,6 @@ def generate_dlt_table(table_conf):
                             df_all = df_all.unionByName(df_month)
                     return df_all
                 else:
-                    # Para não-heavy, particiona por ano do watermark
                     years = [row[0] for row in spark.read.table(source_fqn).select(year(col(t_watermark))).distinct().collect()]
                     df_all = None
                     for y in years:
@@ -118,19 +116,17 @@ def generate_dlt_table(table_conf):
             raise e
 
     target_table_name = t_name
-    
-    dlt.create_table(
-        name=target_table_name,
-        comment=f"Tabela Bronze consolidada. {desc}"
-    )
 
-    dlt.apply_changes(
-        target = target_table_name,
-        source = f"vw_{t_name}_clean",
-        keys = [t_pk],
-        sequence_by = col(t_watermark), # Garante que o registro mais novo vença
-        stored_as_scd_type = 1 # Atualiza (não mantém histórico type 2 na bronze)
-    )
+    @dlt.table(name=target_table_name, comment=f"Tabela Bronze consolidada. {desc}")
+    def bronze_table():
+        dlt.apply_changes(
+            target = target_table_name,
+            source = f"vw_{t_name}_clean",
+            keys = [t_pk],
+            sequence_by = col(t_watermark), # Garante que o registro mais novo vença
+            stored_as_scd_type = 1 # Atualiza (não mantém histórico type 2 na bronze)
+        )
+        return spark.read.table(target_table_name)
 # COMMAND ----------
 
 # MAGIC %md
