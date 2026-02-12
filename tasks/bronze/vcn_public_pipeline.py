@@ -119,7 +119,7 @@ def generate_dlt_table(table_conf):
 
     target_table_name = t_name
     
-    dlt.create_streaming_table(
+    dlt.create_table(
         name=target_table_name,
         comment=f"Tabela Bronze consolidada. {desc}"
     )
