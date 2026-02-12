@@ -34,7 +34,8 @@ with open(CONFIG_PATH, "r") as f:
     config = yaml.safe_load(f)
 
 SOURCE_CATALOG_FEDERATED = config["source_catalog"]
-RAW_CATALOG = f"raw_vcn_{ENVIRONMENT}"
+RAW_CATALOG = "landingzone"  # Catálogo correto onde as tabelas heavy foram ingeridas
+RAW_SCHEMA = "raw"  # Schema dentro do catálogo landingzone
 
 print(f"✅ Pipeline configurado:")
 print(f"   📍 Ambiente: {ENVIRONMENT}")
