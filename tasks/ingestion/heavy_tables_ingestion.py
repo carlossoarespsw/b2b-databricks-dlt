@@ -142,18 +142,6 @@ def ingest_batch(table_conf, start_date, end_date):
     t3 = pytime.time()
     write_time = t3 - t2
 
-    # Tamanho dos arquivos Delta gerados (últimos arquivos do diretório)
-    try:
-        delta_path = spark.sql(f"DESCRIBE DETAIL {target_table}").collect()[0]["location"]
-        files = dbutils.fs.ls(delta_path)
-        # Pega arquivos recentes (últimos 10)
-        recent_files = sorted(files, key=lambda x: x.modificationTime, reverse=True)[:10]
-        file_sizes = [f.size for f in recent_files if f.path.endswith('.parquet')]
-        total_size_mb = sum(file_sizes) / 1024 / 1024
-        avg_file_size_mb = (sum(file_sizes) / len(file_sizes) / 1024 / 1024) if file_sizes else 0
-    except Exception as e:
-        total_size_mb = avg_file_size_mb = -1
-        print(f"      ⚠️ Não foi possível obter tamanho dos arquivos Delta: {e}")
 
     # Número de workers atuais
     try:
@@ -162,7 +150,7 @@ def ingest_batch(table_conf, start_date, end_date):
     except Exception as e:
         num_workers = -1
 
-    print(f"      ⏱️ Tempo leitura: {read_time:.2f}s | escrita: {write_time:.2f}s | arquivos Delta ~{total_size_mb:.1f}MB (média {avg_file_size_mb:.1f}MB) | partições: {num_partitions} | workers: {num_workers} | linhas: {estimated_rows}")
+    print(f"      ⏱️ Tempo leitura: {read_time:.2f}s | escrita: {write_time:.2f}s | partições: {num_partitions} | workers: {num_workers} | linhas: {estimated_rows}")
 
     return estimated_rows
 
