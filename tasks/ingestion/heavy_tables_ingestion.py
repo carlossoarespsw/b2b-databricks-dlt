@@ -5,6 +5,11 @@
 
 # COMMAND ----------
 # I. IMPORTS E SETUP VISUAL
+
+spark.conf.set("spark.databricks.delta.optimizeWrite.enabled", "true")
+spark.conf.set("spark.databricks.delta.autoCompact.enabled", "true")
+spark.conf.set("spark.databricks.delta.targetFileSize", "134217728")  # 128MB
+
 import yaml
 import time
 from datetime import datetime
@@ -91,23 +96,75 @@ def ingest_batch(table_conf, start_date, end_date):
     target_table = f"{RAW_CATALOG}.{RAW_SCHEMA}.{t_name}"
     source_fqn = f"`{SOURCE_CATALOG}`.`{t_schema}`.`{t_name}`"
     
+    import os
+    import math
+    from pyspark.sql import DataFrame
+    from delta.tables import DeltaTable
+    import time as pytime
+
+    # Log: início leitura
+    t0 = pytime.time()
     df = spark.read.table(source_fqn).filter(
         (F.col(t_wm) >= start_date) & (F.col(t_wm) < end_date)
     )
-    
+    t1 = pytime.time()
+    read_time = t1 - t0
+
     for field in df.schema.fields:
         if isinstance(field.dataType, StringType):
             df = df.withColumn(field.name, F.col(field.name).cast("string"))
-            
-    count = df.count()
-    if count > 0:
-        df.withColumn("_ingestion_ts", F.current_timestamp()) \
-          .write.format("delta") \
-          .mode("append") \
-          .option("mergeSchema", "true") \
-          .saveAsTable(target_table)
-    
-    return count
+
+    estimated_rows = df.count()
+    if estimated_rows == 0:
+        print(f"      ⚠️ Batch vazio. Tempo leitura: {read_time:.2f}s")
+        return 0
+
+    num_partitions = min(max(8, estimated_rows // 1_000_000), 128)
+    df = df.repartition(num_partitions)
+
+    # PartitionBy: se watermark for data, particione por ano/mes para evitar excesso de partições
+    if "date" in t_wm or "created" in t_wm or "last_modified" in t_wm:
+        df = df.withColumn("ano", F.year(F.col(t_wm)))
+        df = df.withColumn("mes", F.month(F.col(t_wm)))
+        partition_cols = ["ano", "mes"]
+    else:
+        partition_cols = [t_wm]
+
+    df = df.withColumn("_ingestion_ts", F.current_timestamp())
+
+    # Log: início escrita
+    t2 = pytime.time()
+    df.write.format("delta") \
+        .mode("append") \
+        .option("mergeSchema", "true") \
+        .partitionBy(*partition_cols) \
+        .saveAsTable(target_table)
+    t3 = pytime.time()
+    write_time = t3 - t2
+
+    # Tamanho dos arquivos Delta gerados (últimos arquivos do diretório)
+    try:
+        delta_path = spark.sql(f"DESCRIBE DETAIL {target_table}").collect()[0]["location"]
+        files = dbutils.fs.ls(delta_path)
+        # Pega arquivos recentes (últimos 10)
+        recent_files = sorted(files, key=lambda x: x.modificationTime, reverse=True)[:10]
+        file_sizes = [f.size for f in recent_files if f.path.endswith('.parquet')]
+        total_size_mb = sum(file_sizes) / 1024 / 1024
+        avg_file_size_mb = (sum(file_sizes) / len(file_sizes) / 1024 / 1024) if file_sizes else 0
+    except Exception as e:
+        total_size_mb = avg_file_size_mb = -1
+        print(f"      ⚠️ Não foi possível obter tamanho dos arquivos Delta: {e}")
+
+    # Número de workers atuais
+    try:
+        sc = spark.sparkContext
+        num_workers = sc._jsc.sc().getExecutorMemoryStatus().size() - 1  # -1 para driver
+    except Exception as e:
+        num_workers = -1
+
+    print(f"      ⏱️ Tempo leitura: {read_time:.2f}s | escrita: {write_time:.2f}s | arquivos Delta ~{total_size_mb:.1f}MB (média {avg_file_size_mb:.1f}MB) | partições: {num_partitions} | workers: {num_workers} | linhas: {estimated_rows}")
+
+    return estimated_rows
 
 # COMMAND ----------
 # IV. EXECUÇÃO DO LOOP DE MIGRAÇÃO COM CHECKPOINT INTELIGENTE
