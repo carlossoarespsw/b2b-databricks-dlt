@@ -81,17 +81,42 @@ def generate_dlt_table(table_conf):
     def bronze_table():
         from pyspark.sql import Window
         from pyspark.sql.functions import row_number, month, year
-        
+        import traceback
         try:
-            # Read directly from source
+            # Verificar existência da tabela com try/except
+            try:
+                spark.read.table(source_fqn).limit(0).collect()
+                table_exists = True
+            except Exception as e:
+                table_exists = False
+                print(f"   ⚠️ Erro ao verificar existência de {source_fqn}: {str(e)[:100]}")
+            if not table_exists:
+                print(f"   ⚠️ SKIP: Tabela {source_fqn} não existe")
+                return None
+
+            # Contar registros
+            count = spark.read.table(source_fqn).count()
+            print(f"   ✓ {source_fqn} - Total de registros: {count:,}")
+            if count == 0:
+                print(f"   ⚠️ Tabela {source_fqn} vazia!")
+                return None
+
+            # Lógica de leitura
             if ENVIRONMENT == "dev":
                 df = spark.read.table(source_fqn)
                 df = apply_string_shield(df)
                 df = df.limit(100000)
                 df = df.withColumn("_processed_at", current_timestamp())
+                print(f"   ✓ DEV: Leitura com limite de 100k registros")
             else:
                 if is_heavy:
-                    months = [row[0] for row in spark.read.table(source_fqn).select(month(col(t_watermark))).distinct().collect()]
+                    print(f"   🔄 HEAVY: Processando por mês...")
+                    months_df = spark.read.table(source_fqn).select(month(col(t_watermark))).distinct()
+                    months = [row[0] for row in months_df.collect()]
+                    print(f"   ✓ Meses encontrados: {months}")
+                    if not months:
+                        print(f"   ⚠️ Nenhum mês encontrado - tabela pode estar vazia ou sem coluna {t_watermark}")
+                        return None
                     df_all = None
                     for m in months:
                         df_month = spark.read.table(source_fqn).filter(month(col(t_watermark)) == m)
@@ -103,7 +128,13 @@ def generate_dlt_table(table_conf):
                             df_all = df_all.unionByName(df_month)
                     df = df_all
                 else:
-                    years = [row[0] for row in spark.read.table(source_fqn).select(year(col(t_watermark))).distinct().collect()]
+                    print(f"   🔄 STAGING LIGHT: Processando por ano...")
+                    years_df = spark.read.table(source_fqn).select(year(col(t_watermark))).distinct()
+                    years = [row[0] for row in years_df.collect()]
+                    print(f"   ✓ Anos encontrados: {years}")
+                    if not years:
+                        print(f"   ⚠️ Nenhum ano encontrado - tabela pode estar vazia ou sem coluna {t_watermark}")
+                        return None
                     df_all = None
                     for y in years:
                         df_year = spark.read.table(source_fqn).filter(year(col(t_watermark)) == y)
@@ -114,16 +145,34 @@ def generate_dlt_table(table_conf):
                         else:
                             df_all = df_all.unionByName(df_year)
                     df = df_all
-            
-            # Deduplicate: keep only the latest record per primary key
+
+            if df is None:
+                print(f"   ❌ ERRO: DataFrame retornou None!")
+                return None
+
+            # Otimização: Repartition antes da deduplicação para evitar shuffles grandes
+            num_partitions = 200 if count > 10_000_000 else 50
+            df = df.repartition(num_partitions)
+
+            # Deduplicação
+            print(f"   🔄 Aplicando deduplicação por {t_pk}...")
             window_spec = Window.partitionBy(t_pk).orderBy(col(t_watermark).desc())
             df_dedup = df.withColumn("_row_num", row_number().over(window_spec)) \
                          .filter(col("_row_num") == 1) \
                          .drop("_row_num")
-            
+            final_count = df_dedup.count()
+            print(f"   ✅ Processamento concluído: {final_count:,} registros após dedup")
+
+            # Sugestão: particionar por ano/mês se coluna temporal existir
+            if t_watermark and t_watermark in df_dedup.columns:
+                from pyspark.sql.functions import year, month
+                df_dedup = df_dedup.withColumn("_year", year(col(t_watermark)))
+                df_dedup = df_dedup.withColumn("_month", month(col(t_watermark)))
+                print(f"   ℹ️ Dados preparados para particionamento por _year/_month.")
             return df_dedup
         except Exception as e:
-            print(f"Erro final lendo {source_fqn}: {e}")
+            print(f"   ❌ ERRO final lendo {source_fqn}: {e}")
+            traceback.print_exc()
             raise e
 
 # COMMAND ----------
