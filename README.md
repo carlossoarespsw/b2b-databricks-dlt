@@ -6,7 +6,7 @@ Este repositório contém os **jobs Delta Live Tables (DLT)** para a arquitetura
 
 ```
 b2b-databricks-dlt/
-├── pipelines/                    # Pipelines DLT organizadas por camada
+├── tasks/                        # Tasks DLT organizadas por camada
 │   ├── bronze/                   # Camada Bronze (dados brutos)
 │   │   ├── ingestion_pipeline.py
 │   │   └── README.md
@@ -25,7 +25,6 @@ b2b-databricks-dlt/
 │   ├── staging.yaml
 │   └── prod.yaml
 ├── tests/                        # Testes unitários
-│   └── test_pipelines.py
 ├── .env.example                  # Exemplo de variáveis de ambiente
 ├── requirements.txt              # Dependências Python
 └── README.md                     # Este arquivo
@@ -37,6 +36,28 @@ b2b-databricks-dlt/
 2. **Databricks Repo**: O Terraform sincroniza automaticamente (via `databricks_repo`)
 3. **DLT Pipeline**: A pipeline DLT executa o código sincronizado
 4. **Job**: O job orquestra a execução da pipeline
+
+## 🧭 Resumo Operacional por Ambiente (DLT VCN)
+
+### 🟢 DEV - Laboratorio
+- **Comportamento**: Amostragem rapida
+- **Volume**: N registros (ex: 100.000 linhas) de qualquer epoca
+- **Objetivo**: Validar estrutura, colunas e logica sem custo alto
+- **Disparo**: Manual
+
+### 🟡 STAGING - Ensaio Geral
+- **Comportamento**: Espelho de producao
+- **Volume**: Volume real
+- **Logica**: SCD Type 1 nas gigantes e Full Load nas pequenas
+- **Objetivo**: Testar performance e CDC antes de release
+- **Disparo**: Manual ou via CI/CD
+
+### 🔴 PROD - Vida Real
+- **Comportamento**: Automatico e incremental
+- **Volume**: Deltas diarios apos a carga inicial
+- **Logica**: DLT gerencia estado com base em last_modified
+- **Objetivo**: Manter Lakehouse atualizado
+- **Disparo**: Agendado (ex: 01:00)
 
 ## 🏗️ Arquitetura Medalhão
 

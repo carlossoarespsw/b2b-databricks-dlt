@@ -1,4 +1,4 @@
-# Python Dependencies for DLT Pipelines
+# Python Dependencies for DLT Tasks
 # ========================================
 
 # Core dependencies
