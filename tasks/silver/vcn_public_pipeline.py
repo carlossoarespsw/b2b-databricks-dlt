@@ -76,25 +76,21 @@ def flatten_schema(schema, prefix="", parent_col="", apply_camel_case=True, skip
         field_name = field.name
         field_type = field.dataType
 
-        # Build the full column path
         if parent_col:
             col_path = f"{parent_col}.`{field_name}`"
         else:
             col_path = f"`{field_name}`"
 
-        # Build the alias name
         if apply_camel_case:
             full_name = normalize_name(f"{prefix}_{field_name}" if prefix else field_name)
         else:
             full_name = f"{prefix}_{field_name}" if prefix else field_name
 
-        # PULAR se o nome já existe nos metadados
         if full_name in skip_names:
             print(f"[DLT INFO] Skipping column '{full_name}' from JSON - already exists in metadata")
             continue
 
         if isinstance(field_type, StructType):
-            # Recursively flatten nested structs
             flat_cols.extend(
                 flatten_schema(
                     field_type,
@@ -138,7 +134,6 @@ def get_bronze_tables():
           AND table_name NOT LIKE '__materialization%'
     """).collect()
 
-    # Filtrar apenas tabelas que possuem coluna json_data
     tables_with_json = []
     for r in rows:
         table_name = r.table_name
@@ -163,12 +158,10 @@ def _merge_struct_types(s1, s2):
             fields_map[f.name] = f
         else:
             existing = fields_map[f.name]
-            # Se ambos são StructType, merge recursivo
             if isinstance(existing.dataType, StructType) and isinstance(f.dataType, StructType):
                 merged_inner = _merge_struct_types(existing.dataType, f.dataType)
                 from pyspark.sql.types import StructField
                 fields_map[f.name] = StructField(f.name, merged_inner, nullable=True)
-            # Caso contrário, mantém o existente (primeiro vence)
     return StructType(list(fields_map.values()))
 
 
@@ -185,7 +178,6 @@ def infer_super_schema(spark, table_name, bronze_db=None, sample_size=100):
 
     try:
         df = spark.read.table(f"{db}.{table_name}")
-        # Coletar amostras diversas de json_data
         samples = (
             df.select("json_data")
             .where(F.col("json_data").isNotNull())
@@ -197,7 +189,6 @@ def infer_super_schema(spark, table_name, bronze_db=None, sample_size=100):
             print(f"[DLT WARNING] No json_data rows for {table_name}")
             return None
 
-        # Inferir schema de cada sample e mergir
         merged_schema = None
         for row in samples:
             try:
@@ -214,14 +205,12 @@ def infer_super_schema(spark, table_name, bronze_db=None, sample_size=100):
                 else:
                     merged_schema = _merge_struct_types(merged_schema, row_schema)
             except Exception:
-                # JSON inválido ou primitivo — pular
                 continue
 
         if merged_schema is None or len(merged_schema.fields) == 0:
             print(f"[DLT WARNING] Empty super-schema for {table_name}")
             return None
 
-        # Proteção contra schema explosivo
         MAX_SCHEMA_FIELDS = 5000
         if len(merged_schema.fields) > MAX_SCHEMA_FIELDS:
             print(f"[DLT WARNING] Schema too large for {table_name}: {len(merged_schema.fields)} fields (max {MAX_SCHEMA_FIELDS})")

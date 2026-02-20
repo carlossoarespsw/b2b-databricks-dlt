@@ -92,9 +92,7 @@ def generate_dlt_table(table_conf):
         if ENVIRONMENT == "dev":
             df = spark.read.table(source_fqn)
             df = apply_string_shield(df)
-            # usar .isin para comparar múltiplos anos (evita erro de conversão de Column para bool)
             df = df.filter(year(col("last_modified")).isin(2025, 2026))
-            #df = df.limit(300000)
             df = df.withColumn("_processed_at", current_timestamp())
         else:
             if is_heavy:
